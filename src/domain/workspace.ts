@@ -3,10 +3,10 @@ import { createPrefixedIdSchema, isoDateTimeSchema } from "./common.ts";
 
 export const runtimeProfiles = ["node", "python", "rust", "generic"] as const;
 export const workspaceStatuses = ["creating", "ready", "failed", "deleted"] as const;
-export const internetPolicies = ["disabled", "restricted", "enabled"] as const;
+export const internetPolicies = ["none", "package_registry", "full"] as const;
 
 export const DEFAULT_RUNTIME_PROFILE = "generic" satisfies RuntimeProfile;
-export const DEFAULT_INTERNET_POLICY = "disabled" satisfies InternetPolicy;
+export const DEFAULT_INTERNET_POLICY = "none" satisfies InternetPolicy;
 
 export const runtimeProfileSchema = z.enum(runtimeProfiles);
 export const workspaceStatusSchema = z.enum(workspaceStatuses);

@@ -25,7 +25,7 @@ const workspace = {
   updatedAt: "2026-07-02T12:00:00.000Z",
   expiresAt: "2026-07-02T13:00:00.000Z",
   runtimeProfile: "python",
-  internetPolicy: "disabled",
+  internetPolicy: "none",
   source: {
     type: "empty",
   },
@@ -53,7 +53,7 @@ test("create_workspace input accepts optional fields and validates enums", () =>
       baseRef: "origin/main",
       workspaceName: "Example",
       runtimeProfile: "rust",
-      internetPolicy: "restricted",
+      internetPolicy: "package_registry",
       ttlMinutes: 60,
     }).success,
     true,

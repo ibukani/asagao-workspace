@@ -6,11 +6,16 @@ import {
   type WorkspaceIdFactory,
 } from "../services/workspace-registry.ts";
 import { InMemoryWorkspaceStore } from "../storage/in-memory-workspace-store.ts";
+import {
+  createRunnerSecurityServices,
+  type RunnerSecurityServices,
+} from "../security/index.ts";
 
 export type AppServices = {
   workspaceStore: InMemoryWorkspaceStore;
   workspaceFilesystem: LocalWorkspaceFilesystem;
   workspaceRegistry: WorkspaceRegistry;
+  security: RunnerSecurityServices;
 };
 
 export type CreateAppContextOptions = {
@@ -35,9 +40,12 @@ export function createAppContext({
     ...(createWorkspaceId === undefined ? {} : { createId: createWorkspaceId }),
   });
 
+  const security = createRunnerSecurityServices();
+
   return Object.freeze({
     workspaceStore,
     workspaceFilesystem,
     workspaceRegistry,
+    security,
   });
 }

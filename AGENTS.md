@@ -47,6 +47,15 @@ npm run inspect
 - `tests/`: fast tests for config and pure tool behavior.
 - `docs/`: architecture notes and ADRs.
 
+
+## Runner security rules
+
+- New file, patch, command, and artifact tools must consult `src/security/` policy before performing side effects.
+- Command execution must be denied by default unless an explicit allowlist policy permits it.
+- User secrets must not be injected into runner operations by default.
+- Runner operations should emit audit events through the security boundary.
+- Keep security boundary code independent from `src/tools/`, `src/app/`, `src/http/`, and `src/runtime/` wiring.
+
 ## Adding a tool
 
 1. Create `src/tools/<tool-name>/model.ts` for pure logic.

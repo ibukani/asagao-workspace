@@ -163,7 +163,7 @@ interface CreateWorkspaceInput {
   baseRef?: string;
   workspaceName?: string;
   runtimeProfile?: "rust" | "python" | "node" | "generic";
-  internetPolicy?: "disabled" | "restricted" | "enabled";
+  internetPolicy?: "none" | "package_registry" | "full";
   ttlMinutes?: number;
 }
 ```
@@ -304,6 +304,44 @@ full
 ```
 
 `package_registry` は、実用的な build を可能にしつつ unrestricted network access を避けるための選択肢として扱います。
+
+
+## Runner security policy and audit boundary
+
+Runner の file、patch、command、artifact 操作は、実装前に `src/security/` の security boundary を経由できる形にします。この boundary は実際の sandbox そのものではなく、runner 操作が共有する policy contract、default deny 方針、監査 event model、log masking 拡張点を提供します。
+
+### Workspace security policy
+
+Workspace ごとの policy は次の関心事を分離します。
+
+- `internetPolicy`: `none`、`package_registry`、`full` のいずれか。既定値は `none`。
+- `secrets`: secret は標準では注入しない。`injectByDefault` は常に `false`。
+- `command`: command execution は既定で `deny_all`。明示的な allowlist がある場合のみ許可できる。
+- `file`: read/list/search は policy で明示され、write/delete は既定で拒否される。
+- `patch`: patch application は既定で拒否され、preflight を要求する。
+- `artifact`: artifact create/read は許可可能だが、delete/export は既定で拒否される。
+
+### Command policy
+
+command は shell string ではなく argument array として評価します。`bash`、`sh`、`powershell`、`sudo`、`ssh`、`curl`、`wget` などは初期 denylist に含めます。denylist は allowlist より優先されます。
+
+### Audit event
+
+Runner 操作は、次の共通 event type を記録できるようにします。
+
+```text
+policy_evaluated
+operation_started
+operation_succeeded
+operation_failed
+operation_denied
+```
+
+Audit event は `workspaceId`、operation kind、action、actor、decision、reason code、metadata を含む共通形式にします。永続化はこの段階では要求せず、最初は in-memory recorder と noop recorder を用意します。
+
+### Log masking
+
+secret を標準注入しない方針とは別に、将来 secret を明示注入する場合に備えて log masking の extension point を置きます。audit metadata や command log に secret value が混入した場合、masker を差し替えて redaction できるようにします。
 
 ## UI opportunities
 
