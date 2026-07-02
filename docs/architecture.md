@@ -124,7 +124,7 @@ Workspace Runner の共通 model、Zod schema、tool response envelope を定義
 
 配置場所: `src/security/`
 
-Workspace Runner の file、patch、command、artifact、lifecycle 操作に対する policy 判定、secret default deny、log masking、audit event model を担当します。この層は tool handler、HTTP transport、process runtime の wiring に依存せず、domain model と純粋な policy/audit contract を提供します。
+Workspace Runner の file、git、patch、command、artifact、lifecycle 操作に対する policy 判定、secret default deny、log masking、audit event model を担当します。この層は tool handler、HTTP transport、process runtime の wiring に依存せず、domain model と純粋な policy/audit contract を提供します。
 
 初期 policy は保守的です。internet policy の既定値は `none`、secret は標準では注入せず、command execution は `deny_all` から始めます。patch application、file write/delete、artifact export/delete も明示 policy なしでは許可しません。
 
@@ -177,6 +177,8 @@ get_workspace_lifecycle
 
 Workspace inspection tool は `get_file_tree`、`read_file`、`search_workspace` を公開します。すべて読み取り専用で、workspace-relative path だけを受け取り、host absolute path は返しません。`.git/`、`node_modules/`、`.asagao/` など file policy の denied prefix は省略または拒否されます。binary file は読まず、検索は Phase 1 では literal keyword search のみです。`read_files_batch` は単一 file read の上限・audit・binary handling が安定するまで公開しません。
 
+Workspace git inspection tool は `get_git_status`、`get_workspace_diff` を公開します。これらは任意 shell command ではなく fixed-argument の `git` invocation として service 層に閉じ、git operation policy と audit boundary を通ります。`get_git_status` は branch、HEAD commit、clean 判定、changed files、file ごとの staged / unstaged / untracked / conflicted metadata を返します。`get_workspace_diff` は changed files、diffstat、必要に応じて size-limited patch body を返し、deleted / binary / untracked file と巨大 diff を structured metadata で扱います。非 git workspace は `not_git_workspace` failure として返します。
+
 共通 response は `ok: true` のとき `data` を持ち、`ok: false` のとき `error` を持つ stable envelope を使います。
 
 ## 将来機能の safety boundary
@@ -197,7 +199,7 @@ Workspace inspection tool は `get_file_tree`、`read_file`、`search_workspace`
 
 ## 推奨する次のアーキテクチャマイルストーン
 
-1. git status / workspace diff tool を追加し、lifecycle の dirty marker を実データへ接続する。
+1. `get_git_status` / `get_workspace_diff` を lifecycle の dirty marker 更新へ接続する。
 2. apply_patch tool を追加し、patch 適用後の dirty marker を更新する。
 3. command job 基盤を追加し、lifecycle の busy marker を実行状態へ接続する。
 4. TypeScript と Zod schema を使い、schema と contract drift を早期に検出できる状態を保つ。

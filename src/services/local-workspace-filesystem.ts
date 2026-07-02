@@ -149,6 +149,10 @@ export class LocalWorkspaceFilesystem {
     }
   }
 
+  resolveWorkspaceDirectoryForOperation(workspaceId: string): string {
+    return this.#paths.resolveWorkspaceDirectory(workspaceId);
+  }
+
   deleteWorkspaceDirectory(workspaceId: string): void {
     try {
       const workspaceDirectory = this.#paths.resolveWorkspaceDirectory(workspaceId);

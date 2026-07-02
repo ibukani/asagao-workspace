@@ -32,5 +32,7 @@ test("buildWorkspaceStatus can expose the registered tool list", () => {
     "get_file_tree",
     "read_file",
     "search_workspace",
+    "get_git_status",
+    "get_workspace_diff",
   ]);
 });

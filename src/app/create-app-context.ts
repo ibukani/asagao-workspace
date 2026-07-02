@@ -1,6 +1,7 @@
 import { type AppConfig, loadConfig } from "../config/env.ts";
 import { LocalWorkspaceFilesystem } from "../services/local-workspace-filesystem.ts";
 import { WorkspaceInspectionService } from "../services/workspace-inspection-service.ts";
+import { WorkspaceGitService } from "../services/workspace-git-service.ts";
 import { WorkspaceLifecycleService } from "../services/workspace-lifecycle-service.ts";
 import {
   WorkspaceRegistry,
@@ -21,6 +22,7 @@ export type AppServices = {
   workspaceLifecycleStore: InMemoryWorkspaceLifecycleStore;
   workspaceLifecycleService: WorkspaceLifecycleService;
   workspaceInspectionService: WorkspaceInspectionService;
+  workspaceGitService: WorkspaceGitService;
   security: RunnerSecurityServices;
 };
 
@@ -60,6 +62,12 @@ export function createAppContext({
     security,
     ...(clock === undefined ? {} : { clock }),
   });
+  const workspaceGitService = new WorkspaceGitService({
+    workspaceRegistry,
+    workspaceFilesystem,
+    security,
+    ...(clock === undefined ? {} : { clock }),
+  });
 
   return Object.freeze({
     workspaceStore,
@@ -68,6 +76,7 @@ export function createAppContext({
     workspaceLifecycleStore,
     workspaceLifecycleService,
     workspaceInspectionService,
+    workspaceGitService,
     security,
   });
 }
