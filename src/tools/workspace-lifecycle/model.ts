@@ -5,6 +5,7 @@ import {
   type ToolFailure,
   type ToolResponse,
 } from "../../domain/index.ts";
+import type { WorkspaceLifecycleService } from "../../services/workspace-lifecycle-service.ts";
 import {
   WorkspaceRegistryError,
   type WorkspaceRegistry,
@@ -16,6 +17,8 @@ import {
   type DeleteWorkspaceInput,
   getWorkspaceInputSchema,
   type GetWorkspaceInput,
+  getWorkspaceLifecycleInputSchema,
+  type GetWorkspaceLifecycleInput,
   listWorkspacesInputSchema,
   type ListWorkspacesInput,
 } from "./contracts.ts";
@@ -42,6 +45,11 @@ export type GetWorkspaceResult = ToolResponse<{
 export type DeleteWorkspaceResult = ToolResponse<{
   workspaceId: string;
   deleted: true;
+}>;
+
+export type GetWorkspaceLifecycleResult = ToolResponse<{
+  workspace: NonNullable<ReturnType<WorkspaceRegistry["getWorkspace"]>>;
+  lifecycle: ReturnType<WorkspaceLifecycleService["evaluateWorkspace"]>;
 }>;
 
 export function buildCreateWorkspaceResult(
@@ -90,6 +98,25 @@ export function buildGetWorkspaceResult(
     }
 
     return toolSuccess({ workspace });
+  });
+}
+
+export function buildGetWorkspaceLifecycleResult(
+  lifecycleService: WorkspaceLifecycleService,
+  input: unknown,
+): GetWorkspaceLifecycleResult {
+  const parsed = parseLifecycleInput(getWorkspaceLifecycleInputSchema, input);
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return withRegistryErrorHandling(() => {
+    const record = lifecycleService.getWorkspaceLifecycle(parsed.data.workspaceId);
+    if (record === null) {
+      return workspaceNotFound(parsed.data.workspaceId);
+    }
+
+    return toolSuccess(record);
   });
 }
 
@@ -178,5 +205,6 @@ export type {
   CreateWorkspaceInput,
   DeleteWorkspaceInput,
   GetWorkspaceInput,
+  GetWorkspaceLifecycleInput,
   ListWorkspacesInput,
 };

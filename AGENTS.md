@@ -47,6 +47,16 @@ npm run inspect
 - `tests/`: fast tests for config and pure tool behavior.
 - `docs/`: architecture notes and ADRs.
 
+
+## Runner security rules
+
+- New file, patch, command, artifact, and lifecycle tools must consult `src/security/` policy before performing side effects.
+- Command execution must be denied by default unless an explicit allowlist policy permits it.
+- User secrets must not be injected into runner operations by default.
+- Runner operations should emit audit events through the security boundary.
+- Runner file and patch operations must pass only normalized workspace-relative paths. Reject `..`, absolute paths, drive prefixes, and NUL bytes fail-closed at the security boundary.
+- Keep security boundary code independent from `src/tools/`, `src/app/`, `src/http/`, and `src/runtime/` wiring.
+
 ## Adding a tool
 
 1. Create `src/tools/<tool-name>/model.ts` for pure logic.
@@ -72,7 +82,8 @@ npm run inspect
 - `src/domain/` defines Workspace Runner domain models, Zod schemas, and common tool response envelopes.
 - `src/http/create-http-server.ts` owns HTTP routing and transport handling.
 - `src/tools/workspace-status/` defines the starter status tool.
-- `src/tools/workspace-lifecycle/` defines the in-memory workspace lifecycle MCP tool contracts, pure model, and Apps SDK registration.
-- `src/services/workspace-registry.ts` and `src/storage/in-memory-workspace-store.ts` provide process-local workspace lifecycle state.
+- `src/tools/workspace-lifecycle/` defines the in-memory workspace lifecycle MCP tool contracts, pure model, and Apps SDK registration, including `get_workspace_lifecycle`.
+- `src/services/workspace-registry.ts` and `src/storage/in-memory-workspace-store.ts` provide process-local Workspace record state.
+- `src/services/workspace-lifecycle-service.ts` and `src/storage/in-memory-workspace-lifecycle-store.ts` provide Phase 1 lifecycle foundation state: TTL/reusable evaluation, dirty/busy markers, claim/reset/clean service boundaries, and audit wiring.
 - `public/asagao-widget.html` defines the minimal ChatGPT iframe UI.
 - `.github/workflows/ci.yml` runs verification on pull requests and pushes.

@@ -2,17 +2,21 @@ import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AppConfig } from "../../config/env.ts";
 import type { ToolResponse } from "../../domain/index.ts";
+import type { WorkspaceLifecycleService } from "../../services/workspace-lifecycle-service.ts";
 import type { WorkspaceRegistry } from "../../services/workspace-registry.ts";
 import {
   CREATE_WORKSPACE_TOOL_NAME,
   DELETE_WORKSPACE_TOOL_NAME,
   GET_WORKSPACE_TOOL_NAME,
+  GET_WORKSPACE_LIFECYCLE_TOOL_NAME,
   LIST_WORKSPACES_TOOL_NAME,
   createWorkspaceInputSchema,
   createWorkspaceOutputSchema,
   deleteWorkspaceInputSchema,
   deleteWorkspaceOutputSchema,
   getWorkspaceInputSchema,
+  getWorkspaceLifecycleInputSchema,
+  getWorkspaceLifecycleOutputSchema,
   getWorkspaceOutputSchema,
   listWorkspacesInputSchema,
   listWorkspacesOutputSchema,
@@ -21,17 +25,19 @@ import {
   buildCreateWorkspaceResult,
   buildDeleteWorkspaceResult,
   buildGetWorkspaceResult,
+  buildGetWorkspaceLifecycleResult,
   buildListWorkspacesResult,
 } from "./model.ts";
 
 export type RegisterWorkspaceLifecycleToolsOptions = {
   config: AppConfig;
   workspaceRegistry: WorkspaceRegistry;
+  workspaceLifecycleService: WorkspaceLifecycleService;
 };
 
 export function registerWorkspaceLifecycleTools(
   server: McpServer,
-  { config, workspaceRegistry }: RegisterWorkspaceLifecycleToolsOptions,
+  { config, workspaceRegistry, workspaceLifecycleService }: RegisterWorkspaceLifecycleToolsOptions,
 ): void {
   registerAppTool(
     server,
@@ -116,6 +122,28 @@ export function registerWorkspaceLifecycleTools(
         "Workspace deleted.",
       ),
   );
+
+  registerAppTool(
+    server,
+    GET_WORKSPACE_LIFECYCLE_TOOL_NAME,
+    {
+      title: "Get workspace lifecycle",
+      description:
+        "Returns the derived lifecycle snapshot for one Workspace, including TTL expiry, dirty/busy markers, blockers, and whether it can be reused safely.",
+      inputSchema: getWorkspaceLifecycleInputSchema,
+      outputSchema: getWorkspaceLifecycleOutputSchema,
+      annotations: { readOnlyHint: true },
+      _meta: {
+        ui: { resourceUri: config.ui.widgetUri },
+      },
+    },
+    async (input) =>
+      toAppToolResponse(
+        buildGetWorkspaceLifecycleResult(workspaceLifecycleService, input),
+        "Workspace lifecycle returned.",
+      ),
+  );
+
 }
 
 function toAppToolResponse<Data>(

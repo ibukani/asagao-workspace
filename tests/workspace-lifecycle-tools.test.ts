@@ -6,12 +6,16 @@ import { tmpdir } from "node:os";
 import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig } from "../src/config/env.ts";
 import { LocalWorkspaceFilesystem } from "../src/services/local-workspace-filesystem.ts";
+import { WorkspaceLifecycleService } from "../src/services/workspace-lifecycle-service.ts";
 import { WorkspaceRegistry } from "../src/services/workspace-registry.ts";
 import { InMemoryWorkspaceStore } from "../src/storage/in-memory-workspace-store.ts";
+import { InMemoryWorkspaceLifecycleStore } from "../src/storage/in-memory-workspace-lifecycle-store.ts";
+import { createRunnerSecurityServices } from "../src/security/index.ts";
 import {
   buildCreateWorkspaceResult,
   buildDeleteWorkspaceResult,
   buildGetWorkspaceResult,
+  buildGetWorkspaceLifecycleResult,
   buildListWorkspacesResult,
   WORKSPACE_LIFECYCLE_ERROR_CODES,
   type ListWorkspacesResult,
@@ -19,6 +23,7 @@ import {
 import {
   createWorkspaceOutputSchema,
   deleteWorkspaceOutputSchema,
+  getWorkspaceLifecycleOutputSchema,
   getWorkspaceOutputSchema,
   listWorkspacesOutputSchema,
 } from "../src/tools/workspace-lifecycle/contracts.ts";
@@ -54,6 +59,15 @@ function createRegistry() {
     store: new InMemoryWorkspaceStore(),
     clock: () => new Date("2026-07-02T12:00:00.000Z"),
     createId: () => `wks_tool00${++sequence}`,
+  });
+}
+
+function createLifecycleService(registry: WorkspaceRegistry): WorkspaceLifecycleService {
+  return new WorkspaceLifecycleService({
+    workspaceRegistry: registry,
+    lifecycleStore: new InMemoryWorkspaceLifecycleStore(),
+    security: createRunnerSecurityServices(),
+    clock: () => new Date("2026-07-02T12:00:00.000Z"),
   });
 }
 
@@ -116,6 +130,28 @@ test("workspace lifecycle model gets workspaces and returns not found failures",
   assert.equal(getWorkspaceOutputSchema.safeParse(missing).success, true);
 });
 
+
+
+test("workspace lifecycle model returns derived reusable lifecycle snapshots", () => {
+  const registry = createRegistry();
+  const lifecycleService = createLifecycleService(registry);
+  const created = buildCreateWorkspaceResult(registry, { ttlMinutes: 30 });
+  assert.equal(created.ok, true);
+
+  const response = buildGetWorkspaceLifecycleResult(lifecycleService, {
+    workspaceId: created.data.workspace.workspaceId,
+  });
+  const missing = buildGetWorkspaceLifecycleResult(lifecycleService, { workspaceId: "wks_missing001" });
+
+  assert.equal(response.ok, true);
+  assert.equal(response.data.lifecycle.state, "reusable");
+  assert.equal(response.data.lifecycle.reusable, true);
+  assert.equal(response.data.lifecycle.expiresAt, "2026-07-02T12:30:00.000Z");
+  assert.equal(getWorkspaceLifecycleOutputSchema.safeParse(response).success, true);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.error.code, WORKSPACE_LIFECYCLE_ERROR_CODES.workspaceNotFound);
+});
+
 test("workspace lifecycle model marks workspaces deleted and hides them from default list", () => {
   const registry = createRegistry();
   const created = buildCreateWorkspaceResult(registry, {});
@@ -143,11 +179,13 @@ test("workspace lifecycle model marks workspaces deleted and hides them from def
 
 test("workspace lifecycle registration wires Apps SDK handlers to the shared registry", async () => {
   const registry = createRegistry();
+  const lifecycleService = createLifecycleService(registry);
   const { server, tools } = createFakeMcpServer();
 
   registerWorkspaceLifecycleTools(server, {
     config: loadConfig({ PORT: "9999" }),
     workspaceRegistry: registry,
+    workspaceLifecycleService: lifecycleService,
   });
 
   assert.deepEqual([...tools.keys()], [
@@ -155,11 +193,13 @@ test("workspace lifecycle registration wires Apps SDK handlers to the shared reg
     "list_workspaces",
     "get_workspace",
     "delete_workspace",
+    "get_workspace_lifecycle",
   ]);
 
   const createHandler = requireRegisteredHandler(tools, "create_workspace");
   const listHandler = requireRegisteredHandler(tools, "list_workspaces");
   const deleteHandler = requireRegisteredHandler(tools, "delete_workspace");
+  const lifecycleHandler = requireRegisteredHandler(tools, "get_workspace_lifecycle");
 
   const created = await createHandler({ workspaceName: "Registered handler workspace" });
   assert.equal(created.content[0]?.text, "Workspace created.");
@@ -180,6 +220,19 @@ test("workspace lifecycle registration wires Apps SDK handlers to the shared reg
 
   const createResult = createWorkspaceOutputSchema.parse(created.structuredContent);
   assert.equal(createResult.ok, true);
+
+
+  const lifecycle = await lifecycleHandler({
+    workspaceId: createResult.data.workspace.workspaceId,
+  });
+  assert.equal(lifecycle.content[0]?.text, "Workspace lifecycle returned.");
+  assert.equal(
+    getWorkspaceLifecycleOutputSchema.safeParse(lifecycle.structuredContent).success,
+    true,
+  );
+  const lifecycleResult = getWorkspaceLifecycleOutputSchema.parse(lifecycle.structuredContent);
+  assert.equal(lifecycleResult.ok, true);
+  assert.equal(lifecycleResult.data.lifecycle.reusable, true);
 
   const deleted = await deleteHandler({
     workspaceId: createResult.data.workspace.workspaceId,
