@@ -29,5 +29,8 @@ test("buildWorkspaceStatus can expose the registered tool list", () => {
     "get_workspace",
     "delete_workspace",
     "get_workspace_lifecycle",
+    "get_file_tree",
+    "read_file",
+    "search_workspace",
   ]);
 });

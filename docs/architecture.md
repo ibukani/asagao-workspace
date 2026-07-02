@@ -80,7 +80,7 @@ MCP サーバーの組み立てと、共有 app context の作成を担当しま
 
 配置場所: `src/services/`
 
-application-level な状態遷移と workflow を担当します。現在は `WorkspaceRegistry` が in-memory store を使って Workspace record を管理し、`WorkspaceLifecycleService` が TTL / dirty / busy / reusable 判定、claim/reset/clean の Phase 1 service boundary、audit 接続を担当します。
+application-level な状態遷移と workflow を担当します。現在は `WorkspaceRegistry` が in-memory store を使って Workspace record を管理し、`WorkspaceLifecycleService` が TTL / dirty / busy / reusable 判定、claim/reset/clean の Phase 1 service boundary、audit 接続を担当します。`WorkspaceInspectionService` は Workspace 内 file tree、単一 text file read、literal keyword search を policy / audit 経由で実行します。
 
 `WorkspaceRegistry` の現時点の責務:
 
@@ -175,6 +175,8 @@ get_workspace_lifecycle
 
 この段階では、process-local な Workspace record と local workspace directory を扱います。`create_workspace` は設定された workspace root 配下に workspace directory を作成し、`delete_workspace` は対象 workspace directory だけを削除してから record を `deleted` status へ遷移させます。`get_workspace_lifecycle` は TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。Phase 1 の `reset_workspace` / `clean_workspace` / `claim_workspace` は tool として公開せず、後続実装から使える service boundary と audit 接続に留めます。patch 適用、shell 実行、repository clone、git reset / git clean の実処理は行いません。
 
+Workspace inspection tool は `get_file_tree`、`read_file`、`search_workspace` を公開します。すべて読み取り専用で、workspace-relative path だけを受け取り、host absolute path は返しません。`.git/`、`node_modules/`、`.asagao/` など file policy の denied prefix は省略または拒否されます。binary file は読まず、検索は Phase 1 では literal keyword search のみです。`read_files_batch` は単一 file read の上限・audit・binary handling が安定するまで公開しません。
+
 共通 response は `ok: true` のとき `data` を持ち、`ok: false` のとき `error` を持つ stable envelope を使います。
 
 ## 将来機能の safety boundary
@@ -195,9 +197,8 @@ get_workspace_lifecycle
 
 ## 推奨する次のアーキテクチャマイルストーン
 
-1. Workspace 内 file inspection tool を追加する。
-2. git status / workspace diff tool を追加し、lifecycle の dirty marker を実データへ接続する。
-3. apply_patch tool を追加し、patch 適用後の dirty marker を更新する。
-4. command job 基盤を追加し、lifecycle の busy marker を実行状態へ接続する。
-5. TypeScript と Zod schema を使い、schema と contract drift を早期に検出できる状態を保つ。
-6. ホスティング先を選定してから、deployment-specific adapter を追加する。
+1. git status / workspace diff tool を追加し、lifecycle の dirty marker を実データへ接続する。
+2. apply_patch tool を追加し、patch 適用後の dirty marker を更新する。
+3. command job 基盤を追加し、lifecycle の busy marker を実行状態へ接続する。
+4. TypeScript と Zod schema を使い、schema と contract drift を早期に検出できる状態を保つ。
+5. ホスティング先を選定してから、deployment-specific adapter を追加する。

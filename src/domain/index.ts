@@ -5,3 +5,4 @@ export * from "./snapshot.ts";
 export * from "./tool-response.ts";
 export * from "./workspace-lifecycle.ts";
 export * from "./workspace.ts";
+export * from "./workspace-inspection.ts";

@@ -1,5 +1,6 @@
 import { type AppConfig, loadConfig } from "../config/env.ts";
 import { LocalWorkspaceFilesystem } from "../services/local-workspace-filesystem.ts";
+import { WorkspaceInspectionService } from "../services/workspace-inspection-service.ts";
 import { WorkspaceLifecycleService } from "../services/workspace-lifecycle-service.ts";
 import {
   WorkspaceRegistry,
@@ -19,6 +20,7 @@ export type AppServices = {
   workspaceRegistry: WorkspaceRegistry;
   workspaceLifecycleStore: InMemoryWorkspaceLifecycleStore;
   workspaceLifecycleService: WorkspaceLifecycleService;
+  workspaceInspectionService: WorkspaceInspectionService;
   security: RunnerSecurityServices;
 };
 
@@ -52,6 +54,12 @@ export function createAppContext({
     security,
     ...(clock === undefined ? {} : { clock }),
   });
+  const workspaceInspectionService = new WorkspaceInspectionService({
+    workspaceRegistry,
+    workspaceFilesystem,
+    security,
+    ...(clock === undefined ? {} : { clock }),
+  });
 
   return Object.freeze({
     workspaceStore,
@@ -59,6 +67,7 @@ export function createAppContext({
     workspaceRegistry,
     workspaceLifecycleStore,
     workspaceLifecycleService,
+    workspaceInspectionService,
     security,
   });
 }
