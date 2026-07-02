@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createAppContext } from "../app/create-app-context.js";
 import { createAsagaoMcpServer } from "../app/create-asagao-mcp-server.js";
 import { loadConfig } from "../config/env.js";
 import { isMcpRequest, isSupportedMcpMethod } from "./mcp-request.js";
@@ -13,6 +14,7 @@ export function createAsagaoHttpServer({
   config = loadConfig(),
   createMcpServer = createAsagaoMcpServer,
   logger = console,
+  services = createAppContext(),
 } = {}) {
   return createServer(async (req, res) => {
     if (!req.url) {
@@ -34,7 +36,7 @@ export function createAsagaoHttpServer({
 
     if (isMcpRequest(url.pathname, config.http.mcpPath) && isSupportedMcpMethod(req.method)) {
       setMcpCorsHeaders(res);
-      await handleMcpRequest({ req, res, config, createMcpServer, logger });
+      await handleMcpRequest({ req, res, config, createMcpServer, logger, services });
       return;
     }
 
@@ -42,8 +44,8 @@ export function createAsagaoHttpServer({
   });
 }
 
-async function handleMcpRequest({ req, res, config, createMcpServer, logger }) {
-  const server = createMcpServer({ config });
+async function handleMcpRequest({ req, res, config, createMcpServer, logger, services }) {
+  const server = createMcpServer({ config, services });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
