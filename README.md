@@ -10,7 +10,7 @@ Asagao Workspace は、OpenAI Apps SDK と Model Context Protocol（MCP）サー
 - 将来のツール、認証、永続化、配信まわりの関心事に拡張しやすいレイヤー分けされたソース構成。
 - サーバーの起動、検証、テストを行うローカル開発用スクリプト。
 - ローカルでツールを確認するための MCP Inspector コマンド。
-- 構文チェックとテストを実行する GitHub Actions CI。
+- 構文チェック、TypeScript typecheck、テストを実行する GitHub Actions CI。
 - Codex などのコーディングエージェントがこのリポジトリで作業するための `AGENTS.md`。
 
 ## 必要要件
@@ -48,12 +48,13 @@ curl http://localhost:8787/
 npm run verify
 ```
 
-このコマンドは構文チェックと Node.js のテストスイートを実行します。
+このコマンドは構文チェック、TypeScript typecheck、Node.js のテストスイートを実行します。
 
 個別に実行する場合:
 
 ```bash
 npm run check
+npm run typecheck
 npm test
 ```
 
@@ -90,10 +91,11 @@ https://<your-tunnel-domain>/mcp
 │   ├── architecture.md
 │   └── adr/0001-layered-mcp-app.md
 ├── public/asagao-widget.html
-├── scripts/check-syntax.js
+├── scripts/check-syntax.ts
 ├── src/
 │   ├── app/                 # MCP アプリの組み立て
 │   ├── config/              # 環境変数・設定の読み込み
+│   ├── domain/              # Workspace Runner の共通ドメイン契約
 │   ├── http/                # HTTP + Streamable HTTP transport アダプタ
 │   ├── runtime/             # プロセス起動境界
 │   ├── tools/               # MCP ツールレジストリと各ツールモジュール
@@ -126,9 +128,9 @@ feat/chatgpt-app-minimal-env
 ## 新しいツールを追加する
 
 1. `src/tools/<tool-name>/` の下に新しいディレクトリを作成する。
-2. 純粋なデータ・モデルロジックを `model.js` に置く。
-3. Apps SDK の登録コードを `register.js` に置く。
-4. 登録関数を `src/tools/index.js` に追加する。
+2. 純粋なデータ・モデルロジックを `model.ts` に置く。
+3. Apps SDK の登録コードを `register.ts` に置く。
+4. 登録関数を `src/tools/index.ts` に追加する。
 5. `tests/` 配下にテストを追加または更新する。
 6. ツールが境界、安全性の前提、実行時要件を変える場合は、この README と `docs/architecture.md` を更新する。
 

@@ -161,7 +161,7 @@ interface CreateWorkspaceInput {
   baseRef?: string;
   workspaceName?: string;
   runtimeProfile?: "rust" | "python" | "node" | "generic";
-  internetPolicy?: "none" | "package_registry" | "full";
+  internetPolicy?: "disabled" | "restricted" | "enabled";
   ttlMinutes?: number;
 }
 ```

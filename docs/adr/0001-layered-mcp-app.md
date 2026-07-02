@@ -12,7 +12,7 @@ Accepted
 
 ## Decision
 
-レイヤー分けされた JavaScript 構成を使います。
+レイヤー分けされた TypeScript 構成を使います。
 
 - `server.js` は薄い process entrypoint のままにする。
 - `src/runtime/` は startup と lifecycle を担当する。
@@ -37,8 +37,8 @@ Positive:
 Tradeoffs:
 
 - 最小構成の single-file scaffold よりも file 数が増える。
-- Plain JavaScript では、すべての interface boundary を compile time に強制できない。
+- TypeScript の型は runtime validation の代替ではないため、tool boundary では Zod schema を併用する。
 
 ## Follow-up
 
-Tool surface が十分に大きくなり、schema と contract drift が現実的な保守コストになった段階で、TypeScript への移行を検討します。
+Tool surface が増えても schema と contract drift を抑えられるよう、TypeScript と Zod schema を併用します。

@@ -1,9 +1,11 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
+import type { AppConfig } from "../../config/env.ts";
 import {
   buildWorkspaceStatus,
   WORKSPACE_STATUS_TOOL_NAME,
-} from "./model.js";
+} from "./model.ts";
 
 const inputSchema = {};
 const outputSchema = {
@@ -14,7 +16,7 @@ const outputSchema = {
   nextSteps: z.array(z.string()),
 };
 
-export function registerWorkspaceStatusTool(server, config) {
+export function registerWorkspaceStatusTool(server: McpServer, config: AppConfig): void {
   registerAppTool(
     server,
     WORKSPACE_STATUS_TOOL_NAME,

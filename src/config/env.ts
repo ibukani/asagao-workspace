@@ -9,7 +9,25 @@ export const DEFAULT_WIDGET_URI = "ui://widget/asagao.html";
 
 const WIDGET_FILE_URL = new URL("../../public/asagao-widget.html", import.meta.url);
 
-export function loadConfig(env = process.env) {
+export type AppConfig = {
+  app: {
+    id: string;
+    name: string;
+    version: string;
+  };
+  http: {
+    port: number;
+    mcpPath: string;
+  };
+  ui: {
+    widgetUri: string;
+    widgetFilePath: string;
+  };
+};
+
+export type ConfigEnvironment = Partial<Record<string, string>>;
+
+export function loadConfig(env: ConfigEnvironment = process.env): AppConfig {
   return {
     app: {
       id: env.APP_ID ?? DEFAULT_APP_ID,
@@ -27,7 +45,7 @@ export function loadConfig(env = process.env) {
   };
 }
 
-function parsePort(rawPort) {
+function parsePort(rawPort: string | undefined): number {
   if (rawPort === undefined || rawPort === "") {
     return DEFAULT_PORT;
   }
@@ -40,7 +58,7 @@ function parsePort(rawPort) {
   return port;
 }
 
-function normalizePath(path) {
+function normalizePath(path: string): string {
   if (!path.startsWith("/")) {
     return `/${path}`;
   }

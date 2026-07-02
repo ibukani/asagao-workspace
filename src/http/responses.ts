@@ -1,4 +1,11 @@
-export function writeText(res, statusCode, body, headers = {}) {
+import type { ServerResponse } from "node:http";
+
+export function writeText(
+  res: ServerResponse,
+  statusCode: number,
+  body: string,
+  headers: Record<string, string> = {},
+): void {
   res.writeHead(statusCode, {
     "content-type": "text/plain; charset=utf-8",
     ...headers,
@@ -6,7 +13,7 @@ export function writeText(res, statusCode, body, headers = {}) {
   res.end(body);
 }
 
-export function writeCorsPreflight(res) {
+export function writeCorsPreflight(res: ServerResponse): void {
   res.writeHead(204, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
@@ -16,7 +23,7 @@ export function writeCorsPreflight(res) {
   res.end();
 }
 
-export function setMcpCorsHeaders(res) {
+export function setMcpCorsHeaders(res: ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
 }

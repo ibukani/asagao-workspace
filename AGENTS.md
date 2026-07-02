@@ -12,7 +12,7 @@ This repository contains the Asagao Workspace ChatGPT App scaffold.
 
 - Use Node.js 22 or later.
 - Use npm as the package manager.
-- The process entrypoint is `server.js`.
+- The process entrypoint is `server.js`, which imports TypeScript modules through Node.js type stripping.
 - `server.js` must stay thin; put real implementation under `src/`.
 - The local MCP endpoint is `http://localhost:8787/mcp` by default.
 
@@ -36,6 +36,7 @@ npm run inspect
 
 - `src/app/`: MCP app composition only. It wires resources and tools together.
 - `src/config/`: environment and configuration loading.
+- `src/domain/`: Workspace Runner domain models, Zod schemas, and common tool response envelopes.
 - `src/http/`: HTTP server, CORS, request routing, and Streamable HTTP transport adapter.
 - `src/runtime/`: process startup and lifecycle boundary.
 - `src/tools/`: MCP tool modules. Each tool should keep pure model/data logic separate from Apps SDK registration.
@@ -46,11 +47,11 @@ npm run inspect
 
 ## Adding a tool
 
-1. Create `src/tools/<tool-name>/model.js` for pure logic.
-2. Create `src/tools/<tool-name>/register.js` for Apps SDK registration.
-3. Register it from `src/tools/index.js`.
-4. Add tests that cover the pure logic.
-5. Update `README.md` and `docs/architecture.md` when behavior or boundaries change.
+1. Create `src/tools/<tool-name>/model.ts` for pure logic.
+2. Create `src/tools/<tool-name>/register.ts` for Apps SDK registration.
+3. Register it from `src/tools/index.ts`.
+4. Add tests that cover the pure logic and any exported Zod contract.
+5. Update `README.md`, `docs/architecture.md`, and relevant contract documentation when behavior or boundaries change.
 
 ## Development rules
 
@@ -65,8 +66,10 @@ npm run inspect
 ## Current scaffold
 
 - `server.js` is a thin entrypoint.
-- `src/app/create-asagao-mcp-server.js` composes the MCP server.
-- `src/http/create-http-server.js` owns HTTP routing and transport handling.
+- `src/app/create-asagao-mcp-server.ts` composes the MCP server.
+- `src/domain/` defines Workspace Runner domain models, Zod schemas, and common tool response envelopes.
+- `src/http/create-http-server.ts` owns HTTP routing and transport handling.
 - `src/tools/workspace-status/` defines the starter tool.
+- `src/tools/workspace-lifecycle/contracts.ts` defines the initial workspace lifecycle MCP tool contracts.
 - `public/asagao-widget.html` defines the minimal ChatGPT iframe UI.
 - `.github/workflows/ci.yml` runs verification on pull requests and pushes.

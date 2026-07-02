@@ -36,13 +36,13 @@ Issue の一覧取得、Pull Request の読み取り、コメント投稿、GitH
 
 ```text
 server.js
-  -> src/runtime/start-server.js
-    -> src/http/create-http-server.js
-      -> src/app/create-asagao-mcp-server.js
-        -> src/ui/register-ui-resources.js
-        -> src/tools/index.js
-          -> src/tools/<tool>/register.js
-             -> src/tools/<tool>/model.js
+  -> src/runtime/start-server.ts
+    -> src/http/create-http-server.ts
+      -> src/app/create-asagao-mcp-server.ts
+        -> src/ui/register-ui-resources.ts
+        -> src/tools/index.ts
+          -> src/tools/<tool>/register.ts
+             -> src/tools/<tool>/model.ts
 ```
 
 ### Runtime layer
@@ -79,11 +79,17 @@ MCP サーバーの組み立てを担当します。MCP サーバーを作成し
 
 ```text
 src/tools/<tool-name>/
-├── model.js      # 純粋なデータ・モデルロジック
-└── register.js   # Apps SDK/MCP 登録
+├── model.ts      # 純粋なデータ・モデルロジック
+└── register.ts   # Apps SDK/MCP 登録
 ```
 
-`model.js` はサーバーを起動せずに簡単にテストできるようにします。`register.js` は Apps SDK helper を import し、schema、annotation、metadata、handler を定義してよい場所です。
+`model.ts` はサーバーを起動せずに簡単にテストできるようにします。`register.ts` は Apps SDK helper を import し、schema、annotation、metadata、handler を定義してよい場所です。
+
+### Domain layer
+
+配置場所: `src/domain/`
+
+Workspace Runner の共通 model、Zod schema、tool response envelope を定義します。この層は filesystem、shell、registry 永続化を実行せず、tool contract と service 実装から共有される型境界を提供します。
 
 ### UI resource layer
 
@@ -133,5 +139,5 @@ filesystem、shell、network、user-data に関わるツールを追加する前
 2. 最初の永続化要件が明確になってから `src/storage/` 境界を追加する。
 3. 実際の runner を実装する前に、Workspace、Command Job、Artifact、Snapshot、Change Set の domain model を追加する。
 4. tool handler が重要な app logic を共有し始めたら `src/services/` 境界を追加する。
-5. ツールの surface が数個を超える、または plain JavaScript で schema と contract drift の維持が難しくなった段階で TypeScript を追加する。
+5. TypeScript と Zod schema を使い、schema と contract drift を早期に検出できる状態を保つ。
 6. ホスティング先を選定してから、deployment-specific adapter を追加する。
