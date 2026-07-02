@@ -5,6 +5,7 @@ import {
   runtimeProfileSchema,
   toolFailureSchema,
   workspaceIdSchema,
+  workspaceLifecycleSnapshotSchema,
   workspaceSchema,
   workspaceStatusSchema,
 } from "../../domain/index.ts";
@@ -13,12 +14,14 @@ export const CREATE_WORKSPACE_TOOL_NAME = "create_workspace";
 export const LIST_WORKSPACES_TOOL_NAME = "list_workspaces";
 export const GET_WORKSPACE_TOOL_NAME = "get_workspace";
 export const DELETE_WORKSPACE_TOOL_NAME = "delete_workspace";
+export const GET_WORKSPACE_LIFECYCLE_TOOL_NAME = "get_workspace_lifecycle";
 
 export const WORKSPACE_LIFECYCLE_TOOL_NAMES = [
   CREATE_WORKSPACE_TOOL_NAME,
   LIST_WORKSPACES_TOOL_NAME,
   GET_WORKSPACE_TOOL_NAME,
   DELETE_WORKSPACE_TOOL_NAME,
+  GET_WORKSPACE_LIFECYCLE_TOOL_NAME,
 ] as const;
 
 export const createWorkspaceInputSchema = z
@@ -98,6 +101,23 @@ export const deleteWorkspaceInputSchema = z
   })
   .strict();
 
+export const getWorkspaceLifecycleInputSchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+  })
+  .strict();
+
+export const getWorkspaceLifecycleDataSchema = z
+  .object({
+    workspace: workspaceSchema,
+    lifecycle: workspaceLifecycleSnapshotSchema,
+  })
+  .strict();
+
+export const getWorkspaceLifecycleOutputSchema = createToolResponseSchema(
+  getWorkspaceLifecycleDataSchema,
+);
+
 export const deleteWorkspaceDataSchema = z
   .object({
     workspaceId: workspaceIdSchema,
@@ -128,6 +148,11 @@ export const workspaceLifecycleContracts = {
     inputSchema: deleteWorkspaceInputSchema,
     outputSchema: deleteWorkspaceOutputSchema,
   },
+  [GET_WORKSPACE_LIFECYCLE_TOOL_NAME]: {
+    name: GET_WORKSPACE_LIFECYCLE_TOOL_NAME,
+    inputSchema: getWorkspaceLifecycleInputSchema,
+    outputSchema: getWorkspaceLifecycleOutputSchema,
+  },
 } as const;
 
 export const workspaceLifecycleFailureOutputSchema = toolFailureSchema;
@@ -136,3 +161,4 @@ export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>;
 export type ListWorkspacesInput = z.infer<typeof listWorkspacesInputSchema>;
 export type GetWorkspaceInput = z.infer<typeof getWorkspaceInputSchema>;
 export type DeleteWorkspaceInput = z.infer<typeof deleteWorkspaceInputSchema>;
+export type GetWorkspaceLifecycleInput = z.infer<typeof getWorkspaceLifecycleInputSchema>;

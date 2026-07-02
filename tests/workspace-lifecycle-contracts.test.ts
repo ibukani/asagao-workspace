@@ -4,6 +4,7 @@ import {
   CREATE_WORKSPACE_TOOL_NAME,
   DELETE_WORKSPACE_TOOL_NAME,
   GET_WORKSPACE_TOOL_NAME,
+  GET_WORKSPACE_LIFECYCLE_TOOL_NAME,
   LIST_WORKSPACES_TOOL_NAME,
   WORKSPACE_LIFECYCLE_TOOL_NAMES,
   createWorkspaceInputSchema,
@@ -11,6 +12,8 @@ import {
   deleteWorkspaceInputSchema,
   deleteWorkspaceOutputSchema,
   getWorkspaceInputSchema,
+  getWorkspaceLifecycleInputSchema,
+  getWorkspaceLifecycleOutputSchema,
   getWorkspaceOutputSchema,
   listWorkspacesInputSchema,
   listWorkspacesOutputSchema,
@@ -25,7 +28,7 @@ const workspace = {
   updatedAt: "2026-07-02T12:00:00.000Z",
   expiresAt: "2026-07-02T13:00:00.000Z",
   runtimeProfile: "python",
-  internetPolicy: "disabled",
+  internetPolicy: "none",
   source: {
     type: "empty",
   },
@@ -37,11 +40,16 @@ test("workspace lifecycle tool names are stable and exported", () => {
     LIST_WORKSPACES_TOOL_NAME,
     GET_WORKSPACE_TOOL_NAME,
     DELETE_WORKSPACE_TOOL_NAME,
+    GET_WORKSPACE_LIFECYCLE_TOOL_NAME,
   ]);
   assert.equal(workspaceLifecycleContracts.create_workspace.name, CREATE_WORKSPACE_TOOL_NAME);
   assert.equal(workspaceLifecycleContracts.list_workspaces.name, LIST_WORKSPACES_TOOL_NAME);
   assert.equal(workspaceLifecycleContracts.get_workspace.name, GET_WORKSPACE_TOOL_NAME);
   assert.equal(workspaceLifecycleContracts.delete_workspace.name, DELETE_WORKSPACE_TOOL_NAME);
+  assert.equal(
+    workspaceLifecycleContracts.get_workspace_lifecycle.name,
+    GET_WORKSPACE_LIFECYCLE_TOOL_NAME,
+  );
 });
 
 test("create_workspace input accepts optional fields and validates enums", () => {
@@ -53,7 +61,7 @@ test("create_workspace input accepts optional fields and validates enums", () =>
       baseRef: "origin/main",
       workspaceName: "Example",
       runtimeProfile: "rust",
-      internetPolicy: "restricted",
+      internetPolicy: "package_registry",
       ttlMinutes: 60,
     }).success,
     true,
@@ -62,6 +70,9 @@ test("create_workspace input accepts optional fields and validates enums", () =>
   assert.equal(createWorkspaceInputSchema.safeParse({ baseRef: "origin/main" }).success, false);
   assert.equal(createWorkspaceInputSchema.safeParse({ runtimeProfile: "go" }).success, false);
   assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "open" }).success, false);
+  assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "restricted" }).success, false);
+  assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "disabled" }).success, false);
+  assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "enabled" }).success, false);
   assert.equal(createWorkspaceInputSchema.safeParse({ ttlMinutes: -1 }).success, false);
 });
 
@@ -138,4 +149,46 @@ test("create_workspace output stays inside the common response envelope", () => 
     true,
   );
   assert.equal(createWorkspaceOutputSchema.safeParse({ workspace }).success, false);
+});
+
+
+test("get_workspace_lifecycle input and output expose a reusable lifecycle snapshot", () => {
+  const lifecycle = {
+    workspaceId: "wks_contract123",
+    workspaceStatus: "ready",
+    state: "reusable",
+    reusable: true,
+    expired: false,
+    dirty: false,
+    dirtyState: "clean",
+    busy: false,
+    busyState: "idle",
+    blockers: [],
+    evaluatedAt: "2026-07-02T12:00:00.000Z",
+    expiresAt: "2026-07-02T13:00:00.000Z",
+    lastClaimedAt: null,
+    lastReusedAt: null,
+    lastResetAt: null,
+    lastCleanedAt: null,
+  };
+
+  assert.equal(
+    getWorkspaceLifecycleInputSchema.safeParse({ workspaceId: "wks_contract123" }).success,
+    true,
+  );
+  assert.equal(getWorkspaceLifecycleInputSchema.safeParse({ workspaceId: "bad-id" }).success, false);
+  assert.equal(
+    getWorkspaceLifecycleOutputSchema.safeParse({
+      ok: true,
+      data: { workspace, lifecycle },
+    }).success,
+    true,
+  );
+  assert.equal(
+    getWorkspaceLifecycleOutputSchema.safeParse({
+      ok: false,
+      error: { code: "workspace_not_found", message: "Workspace not found" },
+    }).success,
+    true,
+  );
 });

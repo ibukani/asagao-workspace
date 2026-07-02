@@ -20,5 +20,6 @@ export function registerTools(
   registerWorkspaceLifecycleTools(server, {
     config,
     workspaceRegistry: services.workspaceRegistry,
+    workspaceLifecycleService: services.workspaceLifecycleService,
   });
 }

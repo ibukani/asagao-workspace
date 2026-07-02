@@ -152,6 +152,7 @@ create_workspace
 list_workspaces
 get_workspace
 delete_workspace
+get_workspace_lifecycle
 ```
 
 `create_workspace` は任意の repository 情報を受け取れるようにします。
@@ -163,12 +164,12 @@ interface CreateWorkspaceInput {
   baseRef?: string;
   workspaceName?: string;
   runtimeProfile?: "rust" | "python" | "node" | "generic";
-  internetPolicy?: "disabled" | "restricted" | "enabled";
+  internetPolicy?: "none" | "package_registry" | "full";
   ttlMinutes?: number;
 }
 ```
 
-response には Workspace record を含めます。Issue #8 の段階では、Workspace は process-local な in-memory record として扱いつつ、設定された workspace root 配下に workspace ごとの filesystem directory を作成します。repository clone、patch 適用、shell 実行はまだ行いません。削除時は対象 workspace directory だけを安全に削除してから、record を `deleted` status へ遷移させます。
+response には Workspace record を含めます。Issue #8 の段階では、Workspace は process-local な in-memory record として扱いつつ、設定された workspace root 配下に workspace ごとの filesystem directory を作成します。#23 Phase 1 では `get_workspace_lifecycle` が TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。repository clone、patch 適用、shell 実行、git reset / git clean の実処理はまだ行いません。削除時は対象 workspace directory だけを安全に削除してから、record を `deleted` status へ遷移させます。
 
 ### Workspace inspection
 
@@ -305,6 +306,45 @@ full
 
 `package_registry` は、実用的な build を可能にしつつ unrestricted network access を避けるための選択肢として扱います。
 
+
+## Runner security policy and audit boundary
+
+Runner の file、patch、command、artifact、lifecycle 操作は、実装前に `src/security/` の security boundary を経由できる形にします。この boundary は実際の sandbox そのものではなく、runner 操作が共有する policy contract、default deny 方針、監査 event model、log masking 拡張点を提供します。
+
+### Workspace security policy
+
+Workspace ごとの policy は次の関心事を分離します。
+
+- `internetPolicy`: `none`、`package_registry`、`full` のいずれか。既定値は `none`。
+- `secrets`: secret は標準では注入しない。`injectByDefault` は常に `false`。
+- `command`: command execution は既定で `deny_all`。明示的な allowlist がある場合のみ許可できる。
+- `file`: read/list/search は policy で明示され、write/delete は既定で拒否される。`relativePath` は `src/security/` 境界で POSIX 形式へ正規化され、絶対パス、drive prefix、NUL byte、`..` segment は fail-closed で拒否される。
+- `patch`: patch application は既定で拒否され、preflight を要求する。
+- `artifact`: artifact create/read は許可可能だが、delete/export は既定で拒否される。
+- `lifecycle`: lifecycle inspection と Phase 1 の claim/reset/clean service boundary を policy と audit の対象にする。
+
+### Command policy
+
+command は shell string ではなく argument array として評価します。`bash`、`sh`、`powershell`、`sudo`、`ssh`、`curl`、`wget` などは初期 denylist に含めます。denylist は allowlist より優先されます。
+
+### Audit event
+
+Runner 操作は、次の共通 event type を記録できるようにします。
+
+```text
+policy_evaluated
+operation_started
+operation_succeeded
+operation_failed
+operation_denied
+```
+
+Audit event は `workspaceId`、operation kind、action、actor、decision、reason code、metadata を含む共通形式にします。永続化はこの段階では要求せず、最初は in-memory recorder と noop recorder を用意します。
+
+### Log masking
+
+secret を標準注入しない方針とは別に、将来 secret を明示注入する場合に備えて log masking の extension point を置きます。audit metadata や command log に secret value が混入した場合、masker を差し替えて redaction できるようにします。
+
 ## UI opportunities
 
 MCP tool は UI なしでも有用であるべきですが、ChatGPT App iframe により review workflow を改善できます。
@@ -404,4 +444,4 @@ diff と artifact を生成し、検証済み change set を export する。
 
 ## Local workspace filesystem boundary
 
-`create_workspace` は process-local な Workspace record に加えて、設定された `ASAGAO_WORKSPACE_ROOT` 配下に workspace ごとの local directory を作成します。workspace root が存在しない場合は作成し、directory ではない場合や書き込み不可の場合は明示的な filesystem error として扱います。`delete_workspace` は対象 workspace directory だけを削除し、root 外の path、workspace 外の path、root 外へ抜ける symlink traversal は拒否します。ChatGPT-facing な操作は host の絶対パスではなく `workspaceId + relativePath` を使います。
+`create_workspace` は process-local な Workspace record に加えて、設定された `ASAGAO_WORKSPACE_ROOT` 配下に workspace ごとの local directory を作成します。workspace root が存在しない場合は作成し、directory ではない場合や書き込み不可の場合は明示的な filesystem error として扱います。`delete_workspace` は対象 workspace directory だけを削除し、root 外の path、workspace 外の path、root 外へ抜ける symlink traversal は拒否します。`get_workspace_lifecycle` は host の絶対パスを返さず、Workspace record と派生 lifecycle snapshot のみを返します。ChatGPT-facing な操作は host の絶対パスではなく `workspaceId + relativePath` を使います。

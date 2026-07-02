@@ -1,16 +1,25 @@
 import { type AppConfig, loadConfig } from "../config/env.ts";
 import { LocalWorkspaceFilesystem } from "../services/local-workspace-filesystem.ts";
+import { WorkspaceLifecycleService } from "../services/workspace-lifecycle-service.ts";
 import {
   WorkspaceRegistry,
   type Clock,
   type WorkspaceIdFactory,
 } from "../services/workspace-registry.ts";
 import { InMemoryWorkspaceStore } from "../storage/in-memory-workspace-store.ts";
+import { InMemoryWorkspaceLifecycleStore } from "../storage/in-memory-workspace-lifecycle-store.ts";
+import {
+  createRunnerSecurityServices,
+  type RunnerSecurityServices,
+} from "../security/index.ts";
 
 export type AppServices = {
   workspaceStore: InMemoryWorkspaceStore;
   workspaceFilesystem: LocalWorkspaceFilesystem;
   workspaceRegistry: WorkspaceRegistry;
+  workspaceLifecycleStore: InMemoryWorkspaceLifecycleStore;
+  workspaceLifecycleService: WorkspaceLifecycleService;
+  security: RunnerSecurityServices;
 };
 
 export type CreateAppContextOptions = {
@@ -28,6 +37,7 @@ export function createAppContext({
   const workspaceFilesystem = new LocalWorkspaceFilesystem({
     workspaceRoot: config.workspace.rootPath,
   });
+  const workspaceLifecycleStore = new InMemoryWorkspaceLifecycleStore();
   const workspaceRegistry = new WorkspaceRegistry({
     store: workspaceStore,
     filesystem: workspaceFilesystem,
@@ -35,9 +45,20 @@ export function createAppContext({
     ...(createWorkspaceId === undefined ? {} : { createId: createWorkspaceId }),
   });
 
+  const security = createRunnerSecurityServices();
+  const workspaceLifecycleService = new WorkspaceLifecycleService({
+    workspaceRegistry,
+    lifecycleStore: workspaceLifecycleStore,
+    security,
+    ...(clock === undefined ? {} : { clock }),
+  });
+
   return Object.freeze({
     workspaceStore,
     workspaceFilesystem,
     workspaceRegistry,
+    workspaceLifecycleStore,
+    workspaceLifecycleService,
+    security,
   });
 }

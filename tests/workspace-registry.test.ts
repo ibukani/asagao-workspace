@@ -25,7 +25,7 @@ test("WorkspaceRegistry creates a ready empty workspace with defaults", () => {
   assert.equal(workspace.name, "Workspace wks_registry001");
   assert.equal(workspace.status, "ready");
   assert.equal(workspace.runtimeProfile, "generic");
-  assert.equal(workspace.internetPolicy, "disabled");
+  assert.equal(workspace.internetPolicy, "none");
   assert.deepEqual(workspace.source, { type: "empty" });
   assert.equal(workspace.createdAt, "2026-07-02T12:00:00.000Z");
   assert.equal(workspace.updatedAt, "2026-07-02T12:00:00.000Z");
@@ -42,7 +42,7 @@ test("WorkspaceRegistry creates git workspaces with TTL and source metadata", ()
     baseRef: "origin/main",
     workspaceName: "Example project",
     runtimeProfile: "node",
-    internetPolicy: "restricted",
+    internetPolicy: "package_registry",
     ttlMinutes: 90,
   });
 
@@ -54,7 +54,7 @@ test("WorkspaceRegistry creates git workspaces with TTL and source metadata", ()
     baseRef: "origin/main",
   });
   assert.equal(workspace.runtimeProfile, "node");
-  assert.equal(workspace.internetPolicy, "restricted");
+  assert.equal(workspace.internetPolicy, "package_registry");
   assert.equal(workspace.expiresAt, "2026-07-02T13:30:00.000Z");
   assert.equal(workspace.defaultBranch, "main");
   assert.equal(workspace.workingBranch, "main");
