@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, lstatSync, openSync, readFileSync, readSync, closeSync } from "node:fs";
+import { existsSync, lstatSync, openSync, readSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import type {
   GitChangedFile,
@@ -162,9 +162,15 @@ export class LocalGitRepository {
       maxStdoutBytes: maxPatchBytes + 1,
       rejectOnFailure: true,
     });
-    const generatedPatch = buildUntrackedPatch(workspaceDirectory, changedFiles);
-    const combined = `${trackedPatch.stdout}${trackedPatch.stdout.length > 0 && generatedPatch.length > 0 ? "\n" : ""}${generatedPatch}`;
-    const truncated = trackedPatch.stdoutTruncated || Buffer.byteLength(combined, "utf8") > maxPatchBytes;
+    const trackedPatchPrefix = takeUtf8Prefix(trackedPatch.stdout, maxPatchBytes);
+    const remainingPatchBytes = Math.max(0, maxPatchBytes - Buffer.byteLength(trackedPatchPrefix, "utf8"));
+    const generatedPatch = buildUntrackedPatch(workspaceDirectory, changedFiles, remainingPatchBytes);
+    const separator = trackedPatchPrefix.length > 0 && generatedPatch.content.length > 0 ? "\n" : "";
+    const combined = `${trackedPatchPrefix}${separator}${generatedPatch.content}`;
+    const truncated = trackedPatch.stdoutTruncated
+      || Buffer.byteLength(trackedPatch.stdout, "utf8") > maxPatchBytes
+      || generatedPatch.truncated
+      || Buffer.byteLength(combined, "utf8") > maxPatchBytes;
     const content = takeUtf8Prefix(combined, maxPatchBytes);
 
     return {
@@ -490,16 +496,30 @@ function summarizeUntrackedFile(workspaceDirectory: string, path: string): Numst
     return { path, binary: true };
   }
 
-  const content = readFileSync(absolutePath, "utf8");
-  const additions = content.length === 0 ? 0 : content.split("\n").length - (content.endsWith("\n") ? 1 : 0);
-  return { path, additions, deletions: 0, binary: false };
+  return {
+    path,
+    additions: countTextFileLines(absolutePath),
+    deletions: 0,
+    binary: false,
+  };
 }
 
-function buildUntrackedPatch(workspaceDirectory: string, files: readonly GitChangedFile[]): string {
+function buildUntrackedPatch(
+  workspaceDirectory: string,
+  files: readonly GitChangedFile[],
+  maxPatchBytes: number,
+): { content: string; truncated: boolean } {
   const patches: string[] = [];
+  let remainingBytes = maxPatchBytes;
+  let truncated = false;
   for (const file of files) {
     if (!file.untracked) {
       continue;
+    }
+
+    if (remainingBytes <= 0) {
+      truncated = true;
+      break;
     }
 
     const absolutePath = join(workspaceDirectory, file.path);
@@ -513,33 +533,100 @@ function buildUntrackedPatch(workspaceDirectory: string, files: readonly GitChan
     }
 
     if (file.binary || isBinaryFile(absolutePath)) {
-      patches.push([
+      const binaryPatch = takeUtf8Prefix([
         `diff --git a/${file.path} b/${file.path}`,
         "new file mode 100644",
         "index 0000000..0000000",
         `Binary files /dev/null and b/${file.path} differ`,
-      ].join("\n"));
+      ].join("\n"), remainingBytes);
+      patches.push(binaryPatch);
+      remainingBytes -= Buffer.byteLength(binaryPatch, "utf8");
+      truncated ||= Buffer.byteLength(binaryPatch, "utf8") === 0;
       continue;
     }
 
-    const content = readFileSync(absolutePath, "utf8");
-    const lines = content.length === 0 ? [] : content.split("\n");
-    if (lines.at(-1) === "") {
-      lines.pop();
-    }
-
-    patches.push([
+    const header = [
       `diff --git a/${file.path} b/${file.path}`,
       "new file mode 100644",
       "index 0000000..0000000",
       "--- /dev/null",
       `+++ b/${file.path}`,
-      `@@ -0,0 +1,${lines.length} @@`,
+      `@@ -0,0 +1,${file.additions ?? 0} @@`,
+    ].join("\n");
+    const separatorBytes = patches.length > 0 ? Buffer.byteLength("\n", "utf8") : 0;
+    const headerBytes = Buffer.byteLength(header, "utf8");
+    if (separatorBytes + headerBytes > remainingBytes) {
+      truncated = true;
+      break;
+    }
+
+    const contentBudget = remainingBytes - separatorBytes - headerBytes;
+    const prefix = readTextFilePrefix(absolutePath, contentBudget);
+    const lines = prefix.content.length === 0 ? [] : prefix.content.split("\n");
+    if (lines.at(-1) === "") {
+      lines.pop();
+    }
+
+    const textPatch = [
+      header,
       ...lines.map((line) => `+${line}`),
-    ].join("\n"));
+    ].join("\n");
+    const boundedPatch = takeUtf8Prefix(textPatch, remainingBytes - separatorBytes);
+    patches.push(boundedPatch);
+    remainingBytes -= separatorBytes + Buffer.byteLength(boundedPatch, "utf8");
+    truncated ||= prefix.truncated || Buffer.byteLength(textPatch, "utf8") > Buffer.byteLength(boundedPatch, "utf8");
   }
 
-  return patches.join("\n");
+  return { content: patches.join("\n"), truncated };
+}
+
+function countTextFileLines(absolutePath: string): number {
+  const fd = openSync(absolutePath, "r");
+  const buffer = Buffer.alloc(64 * 1024);
+  let lineCount = 0;
+  let sawBytes = false;
+  let lastByte = -1;
+
+  try {
+    for (;;) {
+      const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) {
+        break;
+      }
+
+      sawBytes = true;
+      for (let index = 0; index < bytesRead; index += 1) {
+        if (buffer[index] === 0x0a) {
+          lineCount += 1;
+        }
+      }
+      lastByte = buffer[bytesRead - 1] ?? -1;
+    }
+  } finally {
+    closeSync(fd);
+  }
+
+  return sawBytes && lastByte !== 0x0a ? lineCount + 1 : lineCount;
+}
+
+function readTextFilePrefix(absolutePath: string, maxBytes: number): { content: string; truncated: boolean } {
+  if (maxBytes <= 0) {
+    return { content: "", truncated: true };
+  }
+
+  const fd = openSync(absolutePath, "r");
+  const buffer = Buffer.alloc(maxBytes + 1);
+
+  try {
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    const truncated = bytesRead > maxBytes;
+    return {
+      content: takeUtf8Prefix(buffer.subarray(0, Math.min(bytesRead, maxBytes)).toString("utf8"), maxBytes),
+      truncated,
+    };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function normalizeGitWorkspacePath(rawPath: string): string {

@@ -159,6 +159,31 @@ test("WorkspaceGitService truncates oversized patch bodies while preserving meta
   }
 });
 
+
+test("WorkspaceGitService truncates large untracked patch bodies without reading them into the result", async () => {
+  const fixture = createFixture();
+  try {
+    initGitRepository(fixture.workspaceDirectory);
+    writeFileSync(join(fixture.workspaceDirectory, "large-untracked.txt"), `${"large line\n".repeat(20_000)}`);
+
+    const result = await fixture.service.getWorkspaceDiff({
+      workspaceId: fixture.workspace.workspaceId,
+      maxPatchBytes: 512,
+    });
+
+    assert.equal(result.patch.included, true);
+    assert.equal(result.patch.truncated, true);
+    assert.equal(result.patch.omittedReason, "max_patch_bytes");
+    assert.ok(result.patch.returnedBytes <= 512);
+    assert.equal(result.diffstat.filesChanged, 1);
+    assert.equal(result.changedFiles[0]?.path, "large-untracked.txt");
+    assert.equal(result.changedFiles[0]?.additions, 20_000);
+  } finally {
+    rmSync(fixture.parent, { recursive: true, force: true });
+  }
+});
+
+
 test("WorkspaceGitService can omit patch content while still returning status and diffstat", async () => {
   const fixture = createFixture();
   try {
