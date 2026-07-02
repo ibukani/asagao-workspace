@@ -31,7 +31,28 @@ export const createWorkspaceInputSchema = z
     internetPolicy: internetPolicySchema.optional(),
     ttlMinutes: z.number().int().positive().max(24 * 60).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (input.repoUrl !== undefined) {
+      return;
+    }
+
+    if (input.branch !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["branch"],
+        message: "branch requires repoUrl",
+      });
+    }
+
+    if (input.baseRef !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["baseRef"],
+        message: "baseRef requires repoUrl",
+      });
+    }
+  });
 
 export const createWorkspaceDataSchema = z
   .object({
