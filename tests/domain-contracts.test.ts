@@ -8,6 +8,7 @@ import {
   toolError,
   toolSuccess,
   workspaceSchema,
+  workspaceSourceSchema,
   snapshotSchema,
 } from "../src/domain/index.ts";
 
@@ -21,12 +22,17 @@ const validWorkspace = {
   updatedAt: now,
   expiresAt: "2026-07-02T13:00:00.000Z",
   runtimeProfile: "node",
+  internetPolicy: "restricted",
   source: {
     type: "git",
     repoUrl: "https://github.com/example/project.git",
     branch: "main",
     baseRef: "origin/main",
   },
+  baseCommit: "abc123",
+  currentCommit: "def456",
+  defaultBranch: "main",
+  workingBranch: "asagao/workspace-alpha",
 };
 
 test("domain schemas accept valid workspace runner models", () => {
@@ -73,14 +79,68 @@ test("domain schemas accept valid workspace runner models", () => {
       status: "ready",
       createdAt: now,
       updatedAt: now,
+      baseCommit: "abc123",
+      changedFiles: [
+        {
+          path: "src/index.ts",
+          status: "modified",
+          additions: 12,
+          deletions: 3,
+        },
+      ],
+      diffstat: {
+        filesChanged: 1,
+        additions: 12,
+        deletions: 3,
+      },
+      patchArtifactId: "art_alpha123",
+      testEvidence: [
+        {
+          jobId: "job_alpha123",
+          name: "npm test",
+          status: "passed",
+          summary: "All tests passed",
+        },
+      ],
+      generatedArtifacts: [
+        {
+          artifactId: "art_alpha123",
+          name: "workspace.diff",
+        },
+      ],
+      suggestedCommitMessage: "Add workspace contracts",
+      suggestedPullRequestBody: "## Summary\n- Add contracts",
+      riskLevel: "low",
     }).status,
     "ready",
   );
 });
 
+test("workspace source is a discriminated union with source-specific invariants", () => {
+  assert.deepEqual(workspaceSourceSchema.parse({ type: "empty" }), { type: "empty" });
+  assert.equal(
+    workspaceSourceSchema.safeParse({
+      type: "git",
+      repoUrl: "https://github.com/example/project.git",
+    }).success,
+    true,
+  );
+
+  assert.equal(workspaceSourceSchema.safeParse({ type: "git" }).success, false);
+  assert.equal(
+    workspaceSourceSchema.safeParse({
+      type: "empty",
+      repoUrl: "https://github.com/example/project.git",
+    }).success,
+    false,
+  );
+  assert.equal(workspaceSourceSchema.safeParse({ type: "empty", branch: "main" }).success, false);
+});
+
 test("domain schemas reject invalid enum values and ids", () => {
   assert.equal(workspaceSchema.safeParse({ ...validWorkspace, status: "running" }).success, false);
   assert.equal(workspaceSchema.safeParse({ ...validWorkspace, runtimeProfile: "deno" }).success, false);
+  assert.equal(workspaceSchema.safeParse({ ...validWorkspace, internetPolicy: "open" }).success, false);
   assert.equal(workspaceSchema.safeParse({ ...validWorkspace, workspaceId: "workspace-1" }).success, false);
   assert.equal(commandJobSchema.safeParse({
     jobId: "job_alpha123",
@@ -89,6 +149,7 @@ test("domain schemas reject invalid enum values and ids", () => {
     command: ["npm", "test"],
     createdAt: now,
     updatedAt: now,
+    exitCode: null,
   }).success, false);
 });
 
