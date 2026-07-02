@@ -1,18 +1,21 @@
 {
   "name": "asagao-workspace",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal ChatGPT App scaffold using the OpenAI Apps SDK and MCP.",
   "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "check": "node --check server.js",
+    "inspect": "npx @modelcontextprotocol/inspector@latest --server-url http://localhost:8787/mcp --transport http"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.7.4",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.4.3"
+    "@modelcontextprotocol/ext-apps": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "zod": "^3.25.76"
   }
 }
