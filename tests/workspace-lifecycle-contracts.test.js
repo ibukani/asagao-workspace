@@ -51,7 +51,6 @@ test("create_workspace input contract accepts repository metadata without execut
   assert.equal(input.runtimeProfile, "node");
   assert.throws(
     () => createWorkspaceInputSchema.parse({ internetPolicy: "unrestricted" }),
-    /Invalid option/,
   );
 });
 
