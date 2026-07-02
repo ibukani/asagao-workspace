@@ -8,6 +8,7 @@ export const commandJobStatuses = [
   "succeeded",
   "failed",
   "canceled",
+  "timed_out",
 ] as const;
 
 export const commandJobStatusSchema = z.enum(commandJobStatuses);
