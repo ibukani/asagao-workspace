@@ -1,38 +1,38 @@
-# Architecture
+# アーキテクチャ
 
-Asagao Workspace is structured as a small but extensible ChatGPT App built around a Model Context Protocol (MCP) server.
+Asagao Workspace は、Model Context Protocol（MCP）サーバーを中心に構成された、小さくても拡張しやすい ChatGPT App です。
 
-The current goal is not to add many capabilities early. The goal is to keep the extension points explicit so future file tools, authentication, persistence, safety checks, and UI screens can be added without turning the entrypoint into a monolith.
+現時点の目的は、早い段階から多くの機能を追加することではありません。将来、ファイル操作ツール、認証、永続化、安全性チェック、UI 画面を追加しても、エントリポイントがモノリス化しないように、拡張ポイントを明示しておくことを目的としています。
 
-## Product direction
+## プロダクトの方向性
 
-Asagao Workspace should be treated as a safe development Workspace Runner for ChatGPT, not as a generic GitHub App clone.
+Asagao Workspace は、汎用的な GitHub App の複製ではなく、ChatGPT のための安全な開発用 Workspace Runner として扱います。
 
-The app should focus on the capabilities that ChatGPT currently lacks inside the chat environment:
+このアプリは、現在の ChatGPT のチャット環境内では不足している次の能力に集中します。
 
-- isolated workspaces
-- multi-file patch and artifact application
-- command execution with asynchronous job polling
-- command logs and validation evidence
-- workspace diffs and git status
-- snapshots and rollback
-- patch, archive, or change-set export
+- 分離された workspace
+- 複数ファイルにまたがる patch と artifact の適用
+- 非同期ジョブポーリング付きのコマンド実行
+- コマンドログと検証証跡
+- workspace の diff と git status
+- snapshot と rollback
+- patch、archive、または change set の export
 
-Simple source-host operations such as listing issues, reading pull requests, posting comments, or editing GitHub metadata should stay outside the core product unless they are directly required to materialize a validated workspace change set.
+Issue の一覧取得、Pull Request の読み取り、コメント投稿、GitHub メタデータ編集のような単純なソースホスト操作は、検証済み workspace change set を具体化するために直接必要でない限り、コアプロダクトの外に置きます。
 
-See [`docs/workspace-runner-design.md`](workspace-runner-design.md) for the detailed design direction.
+詳細な設計方針は [`docs/workspace-runner-design.md`](workspace-runner-design.md) を参照してください。
 
-## Principles
+## 原則
 
-1. Keep `server.js` thin.
-2. Separate transport concerns from app/tool concerns.
-3. Separate Apps SDK registration from pure domain/model logic.
-4. Keep ChatGPT-facing tool contracts stable and structured.
-5. Add write-capable or local-PC-capable tools only after an explicit safety design.
-6. Prefer small modules that can be tested without starting an HTTP server.
-7. Keep the core domain source-host agnostic. GitHub can be a source or destination, but the primary domain model should be Workspace, Command Job, Artifact, Snapshot, and Change Set.
+1. `server.js` は薄く保つ。
+2. transport の関心事と app/tool の関心事を分離する。
+3. Apps SDK 登録と純粋なドメイン・モデルロジックを分離する。
+4. ChatGPT から見える tool contract は安定した構造にする。
+5. 書き込み可能またはローカル PC 操作に近いツールは、明示的な安全設計の後に追加する。
+6. HTTP サーバーを起動せずにテストできる小さなモジュールを優先する。
+7. コアドメインは source host に依存しないように保つ。GitHub は source または destination になり得るが、主要なドメインモデルは Workspace、Command Job、Artifact、Snapshot、Change Set とする。
 
-## Layers
+## レイヤー
 
 ```text
 server.js
@@ -47,91 +47,91 @@ server.js
 
 ### Runtime layer
 
-Location: `src/runtime/`
+配置場所: `src/runtime/`
 
-Owns process startup and lifecycle concerns. This is where future shutdown handling, signal handling, and observability startup hooks should live.
+プロセス起動とライフサイクル上の関心事を担当します。将来の shutdown handling、signal handling、observability の起動 hook はここに置きます。
 
 ### HTTP layer
 
-Location: `src/http/`
+配置場所: `src/http/`
 
-Owns HTTP routing, CORS, health checks, and MCP Streamable HTTP transport handling. It should not contain tool-specific business logic.
+HTTP routing、CORS、health check、MCP Streamable HTTP transport の処理を担当します。ツール固有の business logic は含めません。
 
-Future additions that belong here:
+将来ここに置くもの:
 
 - production CORS policy
 - request logging
 - rate limiting
-- health and readiness checks
-- transport-level authentication hooks
+- health check と readiness check
+- transport-level authentication hook
 
 ### App composition layer
 
-Location: `src/app/`
+配置場所: `src/app/`
 
-Owns the composition of the MCP server. It creates the MCP server and registers UI resources and tools. It should remain a wiring layer.
+MCP サーバーの組み立てを担当します。MCP サーバーを作成し、UI リソースとツールを登録します。この層は wiring layer のままにします。
 
 ### Tool layer
 
-Location: `src/tools/`
+配置場所: `src/tools/`
 
-Each tool should use this pattern:
+各ツールは次の構成を使います。
 
 ```text
 src/tools/<tool-name>/
-├── model.js      # pure data/model logic
-└── register.js   # Apps SDK/MCP registration
+├── model.js      # 純粋なデータ・モデルロジック
+└── register.js   # Apps SDK/MCP 登録
 ```
 
-`model.js` should be easy to test without running the server. `register.js` may import Apps SDK helpers and define schemas, annotations, metadata, and handlers.
+`model.js` はサーバーを起動せずに簡単にテストできるようにします。`register.js` は Apps SDK helper を import し、schema、annotation、metadata、handler を定義してよい場所です。
 
 ### UI resource layer
 
-Location: `src/ui/` and `public/`
+配置場所: `src/ui/` と `public/`
 
-`src/ui/` registers Apps SDK resources. `public/` stores static HTML/CSS/JS assets.
+`src/ui/` は Apps SDK resource を登録します。`public/` は静的な HTML/CSS/JS asset を置きます。
 
-The UI should remain optional from the tool model's point of view. A tool should still return useful structured content even if no UI is rendered.
+ツールモデルから見て UI は任意の存在にします。UI が描画されない場合でも、ツールは有用な structured content を返す必要があります。
 
 ### Configuration layer
 
-Location: `src/config/`
+配置場所: `src/config/`
 
-Owns environment parsing and defaults. Runtime code should consume a `config` object rather than reading `process.env` directly.
+環境変数の解析と既定値を担当します。Runtime code は `process.env` を直接読むのではなく、`config` object を受け取って利用します。
 
 ## Tool contract policy
 
-Every tool should define:
+すべてのツールは次を定義します。
 
-- a concrete action-oriented name
+- 具体的で action-oriented な名前
 - input schema
 - output schema
-- read/write annotations where applicable
-- structured content for ChatGPT and UI consumers
-- tests for pure output-building logic
+- 必要に応じた read/write annotation
+- ChatGPT と UI consumer のための structured content
+- 純粋な出力構築ロジックのテスト
 
-Avoid generic names like `execute`, `run`, `do_task`, or `handle`.
+`execute`、`run`、`do_task`、`handle` のような汎用的すぎる名前は避けます。
 
-## Safety boundary for future capabilities
+## 将来機能の safety boundary
 
-Before adding filesystem, shell, network, or user-data tools, add a design document that covers:
+filesystem、shell、network、user-data に関わるツールを追加する前に、次の内容を含む設計ドキュメントを追加します。
 
-- allowed operations
-- denied operations
-- permission model
-- confirmation model
+- 許可する操作
+- 拒否する操作
+- 権限モデル
+- 確認モデル
 - audit logging
 - data retention
 - error behavior
-- test cases for unsafe inputs
+- unsafe input に対するテストケース
 
-Until that exists, this project should avoid arbitrary local shell execution and broad filesystem access.
+この設計が存在するまでは、任意のローカル shell 実行や広範な filesystem access は避けます。
 
-## Recommended next architecture milestones
+## 推奨する次のアーキテクチャマイルストーン
 
-1. Add a `src/security/` boundary before implementing write-capable tools.
-2. Add a `src/storage/` boundary only when the first persistent state requirement is clear.
-3. Add domain models for Workspace, Command Job, Artifact, Snapshot, and Change Set before implementing the real runner.
-4. Add a `src/services/` boundary if tool handlers start sharing nontrivial app logic.
-5. Add TypeScript once the tool surface grows beyond a few modules or schemas become difficult to maintain in plain JavaScript.
-6. Add deployment-specific adapters only after choosing the hosting target.
+1. 書き込み可能なツールを実装する前に `src/security/` 境界を追加する。
+2. 最初の永続化要件が明確になってから `src/storage/` 境界を追加する。
+3. 実際の runner を実装する前に、Workspace、Command Job、Artifact、Snapshot、Change Set の domain model を追加する。
+4. tool handler が重要な app logic を共有し始めたら `src/services/` 境界を追加する。
+5. ツールの surface が数個を超える、または plain JavaScript で schema と contract drift の維持が難しくなった段階で TypeScript を追加する。
+6. ホスティング先を選定してから、deployment-specific adapter を追加する。
