@@ -7,9 +7,9 @@ Asagao Workspace は、OpenAI Apps SDK と Model Context Protocol（MCP）サー
 - `/mcp` で公開される最小構成の Node.js MCP サーバー。
 - ChatGPT Apps 用の小さな iframe UI リソース。
 - 読み取り専用のスターターツール: `get_workspace_status`。
-- in-memory Workspace lifecycle ツール: `create_workspace`、`list_workspaces`、`get_workspace`、`delete_workspace`。
+- Workspace lifecycle ツール: `create_workspace`、`list_workspaces`、`get_workspace`、`delete_workspace`。
 - Workspace Runner の中核となる domain model: Workspace、Command Job、Artifact、Snapshot、Change Set。
-- Workspace lifecycle 系ツールの contract schema と handler model。
+- Workspace lifecycle 系ツールの contract schema、handler model、local workspace directory 管理。
 - 共通 tool result envelope と error result の pure model。
 - 将来のツール、認証、永続化、配信まわりの関心事に拡張しやすいレイヤー分けされたソース構成。
 - サーバーの起動、検証、テストを行うローカル開発用スクリプト。
@@ -100,6 +100,7 @@ https://<your-tunnel-domain>/mcp
 │   ├── app/                 # MCP アプリの組み立てと共有 app context
 │   ├── config/              # 環境変数・設定の読み込み
 │   ├── domain/              # Workspace Runner の共通ドメイン契約
+│   ├── filesystem/          # Workspace root / path traversal / symlink 境界
 │   ├── http/                # HTTP + Streamable HTTP transport アダプタ
 │   ├── runtime/             # プロセス起動境界
 │   ├── services/            # Workspace registry などの application service
@@ -140,9 +141,19 @@ feat/chatgpt-app-minimal-env
 - `get_workspace`
 - `delete_workspace`
 
-この段階では process-local な in-memory Workspace record を作成・一覧・取得・削除できます。削除は record を物理削除せず、`deleted` status へ遷移させます。
+この段階では process-local な Workspace record を作成・一覧・取得・削除できます。`create_workspace` は設定された workspace root 配下に workspace ごとの実ディレクトリを作成し、`delete_workspace` は対象 workspace directory だけを安全に削除してから record を `deleted` status へ遷移させます。
 
-実際の workspace directory 作成、filesystem 操作、shell 実行、repository clone、patch 適用はまだ行いません。
+workspace root は環境変数で変更できます。
+
+```text
+ASAGAO_WORKSPACE_ROOT=.asagao/workspaces
+```
+
+`ASAGAO_WORKSPACE_ROOT` は相対パス・絶対パスの両方を受け付け、内部では絶対パスへ正規化されます。空文字、NUL byte、URL 形式、filesystem root そのものは拒否されます。workspace root が存在しない場合は作成し、directory ではない場合や書き込み不可の場合は明示的な filesystem error として扱います。
+
+Workspace path の解決は `workspaceId + relativePath` の形に閉じ、root 外・workspace 外へ出る path traversal と、root 外へ抜ける symlink traversal を拒否します。ChatGPT-facing な tool output にはホスト側の絶対パスを露出しません。
+
+repository clone、patch 適用、shell 実行、file read/write tool はまだ行いません。
 
 ## 新しいツールを追加する
 
@@ -155,9 +166,9 @@ feat/chatgpt-app-minimal-env
 
 ## 次のステップ
 
-1. Config 可能な workspace root と安全な path 境界を追加する。
-2. ユーザー固有または書き込み可能なツールを公開する前に、認証が必要かどうかを決める。
-3. Runner 安全ポリシーと監査ログの基盤を追加する。
-4. 実 filesystem workspace の作成・削除を lifecycle service に接続する。
+1. Runner 安全ポリシーと監査ログの基盤を追加する。
+2. Workspace 内 file inspection tool を追加する。
+3. apply_patch と git status/diff tool を追加する。
+4. command job 基盤を追加する。
 5. ツールモデルが安定してから状態の永続化を追加する。
 6. 対象のホスティング基盤を選定してからデプロイ設定を追加する。

@@ -7,6 +7,12 @@ const REPO_ROOT = new URL("..", import.meta.url).pathname;
 
 const forbiddenDependencies = [
   {
+    layer: "filesystem",
+    directory: "src/filesystem",
+    forbiddenPattern: /from\s+["'][^"']*\/tools\//,
+    reason: "filesystem boundaries must not depend on tool contracts or handlers",
+  },
+  {
     layer: "services",
     directory: "src/services",
     forbiddenPattern: /from\s+["'][^"']*\/tools\//,

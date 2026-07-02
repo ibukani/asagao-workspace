@@ -168,7 +168,7 @@ interface CreateWorkspaceInput {
 }
 ```
 
-response には Workspace record を含めます。MVP のこの段階では、Workspace は process-local な in-memory record として扱い、filesystem directory 作成、clone、patch、shell 実行は行いません。削除は物理削除ではなく `deleted` status への遷移です。
+response には Workspace record を含めます。Issue #8 の段階では、Workspace は process-local な in-memory record として扱いつつ、設定された workspace root 配下に workspace ごとの filesystem directory を作成します。repository clone、patch 適用、shell 実行はまだ行いません。削除時は対象 workspace directory だけを安全に削除してから、record を `deleted` status へ遷移させます。
 
 ### Workspace inspection
 
@@ -400,3 +400,8 @@ diff と artifact を生成し、検証済み change set を export する。
 ```
 
 主要なプロダクト価値は、ChatGPT に現在不足している実行レイヤーと change-set レイヤーを提供しつつ、source-host operation はそれを得意とする既存 tool に委譲することです。
+
+
+## Local workspace filesystem boundary
+
+`create_workspace` は process-local な Workspace record に加えて、設定された `ASAGAO_WORKSPACE_ROOT` 配下に workspace ごとの local directory を作成します。workspace root が存在しない場合は作成し、directory ではない場合や書き込み不可の場合は明示的な filesystem error として扱います。`delete_workspace` は対象 workspace directory だけを削除し、root 外の path、workspace 外の path、root 外へ抜ける symlink traversal は拒否します。ChatGPT-facing な操作は host の絶対パスではなく `workspaceId + relativePath` を使います。

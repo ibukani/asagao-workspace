@@ -12,10 +12,11 @@ type CreateAsagaoMcpServerOptions = {
   services?: AppServices;
 };
 
-export function createAsagaoMcpServer({
-  config = loadConfig(),
-  services = createAppContext(),
-}: CreateAsagaoMcpServerOptions = {}): McpServer {
+export function createAsagaoMcpServer(
+  options: CreateAsagaoMcpServerOptions = {},
+): McpServer {
+  const config = options.config ?? loadConfig();
+  const services = options.services ?? createAppContext({ config });
   const server = new McpServer({
     name: config.app.id,
     version: config.app.version,

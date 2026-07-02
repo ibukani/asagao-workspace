@@ -39,7 +39,7 @@ export function registerWorkspaceLifecycleTools(
     {
       title: "Create workspace",
       description:
-        "Creates a process-local in-memory Workspace record. This does not create directories, clone repositories, apply patches, or run commands yet.",
+        "Creates a process-local Workspace record and a local workspace directory under the configured workspace root. This does not clone repositories, apply patches, or run commands yet.",
       inputSchema: createWorkspaceInputSchema,
       outputSchema: createWorkspaceOutputSchema,
       annotations: { readOnlyHint: false },
@@ -60,7 +60,7 @@ export function registerWorkspaceLifecycleTools(
     {
       title: "List workspaces",
       description:
-        "Lists process-local in-memory Workspace records. Deleted workspaces are hidden unless includeDeleted is true.",
+        "Lists process-local Workspace records. Deleted workspaces are hidden unless includeDeleted is true.",
       inputSchema: listWorkspacesInputSchema,
       outputSchema: listWorkspacesOutputSchema,
       annotations: { readOnlyHint: true },
@@ -81,7 +81,7 @@ export function registerWorkspaceLifecycleTools(
     {
       title: "Get workspace",
       description:
-        "Returns one process-local in-memory Workspace record by workspaceId, including deleted status when present.",
+        "Returns one process-local Workspace record by workspaceId, including deleted status when present.",
       inputSchema: getWorkspaceInputSchema,
       outputSchema: getWorkspaceOutputSchema,
       annotations: { readOnlyHint: true },
@@ -102,7 +102,7 @@ export function registerWorkspaceLifecycleTools(
     {
       title: "Delete workspace",
       description:
-        "Marks an in-memory Workspace as deleted. This does not delete filesystem data because filesystem workspaces are not implemented yet.",
+        "Safely deletes the local workspace directory under the configured workspace root, then marks the Workspace record as deleted.",
       inputSchema: deleteWorkspaceInputSchema,
       outputSchema: deleteWorkspaceOutputSchema,
       annotations: { readOnlyHint: false },
@@ -113,7 +113,7 @@ export function registerWorkspaceLifecycleTools(
     async (input) =>
       toAppToolResponse(
         buildDeleteWorkspaceResult(workspaceRegistry, input),
-        "Workspace marked as deleted.",
+        "Workspace deleted.",
       ),
   );
 }

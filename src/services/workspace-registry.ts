@@ -21,6 +21,40 @@ export type WorkspaceStore = {
   list: (filters?: WorkspaceListFilters) => Workspace[];
 };
 
+export type WorkspaceFilesystem = {
+  createWorkspaceDirectory: (workspaceId: string) => void;
+  deleteWorkspaceDirectory: (workspaceId: string) => void;
+};
+
+export const WORKSPACE_REGISTRY_ERROR_CODES = {
+  filesystemOperationFailed: "workspace_filesystem_operation_failed",
+} as const;
+
+export type WorkspaceRegistryErrorCode =
+  (typeof WORKSPACE_REGISTRY_ERROR_CODES)[keyof typeof WORKSPACE_REGISTRY_ERROR_CODES];
+
+export class WorkspaceRegistryError extends Error {
+  readonly code: WorkspaceRegistryErrorCode;
+  readonly operation: "create" | "delete";
+  readonly workspaceId: string;
+
+  constructor(
+    code: WorkspaceRegistryErrorCode,
+    message: string,
+    {
+      operation,
+      workspaceId,
+      cause,
+    }: { operation: "create" | "delete"; workspaceId: string; cause?: unknown },
+  ) {
+    super(message, { cause });
+    this.name = "WorkspaceRegistryError";
+    this.code = code;
+    this.operation = operation;
+    this.workspaceId = workspaceId;
+  }
+}
+
 export type CreateWorkspaceRequest = {
   repoUrl?: string;
   branch?: string;
@@ -33,6 +67,7 @@ export type CreateWorkspaceRequest = {
 
 export type CreateWorkspaceRegistryOptions = {
   store: WorkspaceStore;
+  filesystem?: WorkspaceFilesystem;
   clock?: Clock;
   createId?: WorkspaceIdFactory;
 };
@@ -45,15 +80,18 @@ export type ListWorkspacesOptions = {
 
 export class WorkspaceRegistry {
   readonly #store: WorkspaceStore;
+  readonly #filesystem: WorkspaceFilesystem | null;
   readonly #clock: Clock;
   readonly #createId: WorkspaceIdFactory;
 
   constructor({
     store,
+    filesystem,
     clock = () => new Date(),
     createId = createWorkspaceId,
   }: CreateWorkspaceRegistryOptions) {
     this.#store = store;
+    this.#filesystem = filesystem ?? null;
     this.#clock = clock;
     this.#createId = createId;
   }
@@ -62,8 +100,43 @@ export class WorkspaceRegistry {
     const workspace = createWorkspaceModel(this.#buildWorkspaceModelInput(input), {
       now: this.#clock(),
     });
+    const creatingWorkspace = this.#store.save(workspace);
 
-    return this.#store.save(workspace);
+    if (this.#filesystem === null) {
+      return this.#store.save(
+        updateWorkspaceStatus(creatingWorkspace, {
+          status: "ready",
+          updatedAt: this.#clock(),
+        }),
+      );
+    }
+
+    try {
+      this.#filesystem.createWorkspaceDirectory(creatingWorkspace.workspaceId);
+    } catch (error) {
+      this.#store.save(
+        updateWorkspaceStatus(creatingWorkspace, {
+          status: "failed",
+          updatedAt: this.#clock(),
+        }),
+      );
+      throw new WorkspaceRegistryError(
+        WORKSPACE_REGISTRY_ERROR_CODES.filesystemOperationFailed,
+        `Failed to create local filesystem workspace for ${creatingWorkspace.workspaceId}.`,
+        {
+          operation: "create",
+          workspaceId: creatingWorkspace.workspaceId,
+          cause: error,
+        },
+      );
+    }
+
+    return this.#store.save(
+      updateWorkspaceStatus(creatingWorkspace, {
+        status: "ready",
+        updatedAt: this.#clock(),
+      }),
+    );
   }
 
   listWorkspaces(options: ListWorkspacesOptions = {}): Workspace[] {
@@ -100,6 +173,22 @@ export class WorkspaceRegistry {
       return workspace;
     }
 
+    if (this.#filesystem !== null) {
+      try {
+        this.#filesystem.deleteWorkspaceDirectory(workspace.workspaceId);
+      } catch (error) {
+        throw new WorkspaceRegistryError(
+          WORKSPACE_REGISTRY_ERROR_CODES.filesystemOperationFailed,
+          `Failed to delete local filesystem workspace for ${workspace.workspaceId}.`,
+          {
+            operation: "delete",
+            workspaceId: workspace.workspaceId,
+            cause: error,
+          },
+        );
+      }
+    }
+
     return this.#store.save(
       markWorkspaceDeleted(workspace, { deletedAt: this.#clock() }),
     );
@@ -111,7 +200,7 @@ export class WorkspaceRegistry {
     return {
       workspaceId: this.#createId(),
       name: input.workspaceName,
-      status: "ready",
+      status: "creating",
       source,
       runtimeProfile: input.runtimeProfile,
       internetPolicy: input.internetPolicy,
