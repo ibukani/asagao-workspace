@@ -1,6 +1,16 @@
+import type { AppConfig } from "../../config/env.ts";
+
 export const WORKSPACE_STATUS_TOOL_NAME = "get_workspace_status";
 
-export function buildWorkspaceStatus(config) {
+export type WorkspaceStatus = {
+  appName: string;
+  status: "ready_for_local_development";
+  mcpEndpoint: string;
+  availableTools: string[];
+  nextSteps: string[];
+};
+
+export function buildWorkspaceStatus(config: AppConfig): WorkspaceStatus {
   return {
     appName: config.app.name,
     status: "ready_for_local_development",

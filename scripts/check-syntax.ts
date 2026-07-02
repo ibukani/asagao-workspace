@@ -1,22 +1,22 @@
-import { statSync, readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const TARGETS = ["server.js", "scripts", "src", "tests"];
+const JAVASCRIPT_TARGETS = ["server.js"];
 
-for (const target of TARGETS) {
+for (const target of JAVASCRIPT_TARGETS) {
   for (const filePath of collectJavaScriptFiles(target)) {
     execFileSync(process.execPath, ["--check", filePath], { stdio: "inherit" });
   }
 }
 
-function* collectJavaScriptFiles(path) {
+function* collectJavaScriptFiles(path: string): Generator<string> {
   let stat;
 
   try {
     stat = statSync(path);
   } catch (error) {
-    if (error?.code === "ENOENT") {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return;
     }
     throw error;

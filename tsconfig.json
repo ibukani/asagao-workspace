@@ -4,7 +4,9 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2023"],
+    "types": ["node"],
     "allowJs": true,
+    "allowImportingTsExtensions": true,
     "checkJs": false,
     "noEmit": true,
     "strict": true,
@@ -14,8 +16,8 @@
   },
   "include": [
     "server.js",
-    "scripts/**/*.js",
-    "src/**/*.js",
-    "tests/**/*.js"
+    "scripts/**/*.ts",
+    "src/**/*.ts",
+    "tests/**/*.ts"
   ]
 }

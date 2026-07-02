@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadConfig } from "../src/config/env.js";
+import { loadConfig } from "../src/config/env.ts";
 import {
   buildWorkspaceStatus,
   WORKSPACE_STATUS_TOOL_NAME,
-} from "../src/tools/workspace-status/model.js";
+} from "../src/tools/workspace-status/model.ts";
 
 test("buildWorkspaceStatus exposes the starter tool and local endpoint", () => {
   const config = loadConfig({ PORT: "9999" });
