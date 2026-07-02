@@ -53,16 +53,18 @@ Workspace は、分離された working copy と runtime metadata です。
 ```ts
 interface Workspace {
   workspaceId: string;
+  name: string;
   status: "creating" | "ready" | "failed" | "deleted";
-  source?: RepositorySource;
-  baseCommit?: string;
-  currentCommit?: string;
-  defaultBranch?: string;
-  workingBranch?: string;
+  source: EmptyWorkspaceSource | GitWorkspaceSource;
+  baseCommit?: string | null;
+  currentCommit?: string | null;
+  defaultBranch?: string | null;
+  workingBranch?: string | null;
   runtimeProfile: RuntimeProfile;
   internetPolicy: InternetPolicy;
   createdAt: string;
-  expiresAt?: string;
+  updatedAt: string;
+  expiresAt: string | null;
 }
 ```
 
@@ -166,7 +168,7 @@ interface CreateWorkspaceInput {
 }
 ```
 
-response には `workspaceId`、status、base commit、working branch、expiration metadata を含めます。
+response には Workspace record を含めます。MVP のこの段階では、Workspace は process-local な in-memory record として扱い、filesystem directory 作成、clone、patch、shell 実行は行いません。削除は物理削除ではなく `deleted` status への遷移です。
 
 ### Workspace inspection
 

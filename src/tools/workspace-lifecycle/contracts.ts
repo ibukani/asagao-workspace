@@ -66,6 +66,7 @@ export const listWorkspacesInputSchema = z
   .object({
     status: z.array(workspaceStatusSchema).min(1).optional(),
     runtimeProfile: z.array(runtimeProfileSchema).min(1).optional(),
+    includeDeleted: z.boolean().optional(),
   })
   .strict();
 

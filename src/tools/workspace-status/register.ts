@@ -16,7 +16,15 @@ const outputSchema = {
   nextSteps: z.array(z.string()),
 };
 
-export function registerWorkspaceStatusTool(server: McpServer, config: AppConfig): void {
+export type RegisterWorkspaceStatusToolOptions = {
+  availableTools?: readonly string[];
+};
+
+export function registerWorkspaceStatusTool(
+  server: McpServer,
+  config: AppConfig,
+  options: RegisterWorkspaceStatusToolOptions = {},
+): void {
   registerAppTool(
     server,
     WORKSPACE_STATUS_TOOL_NAME,
@@ -32,7 +40,7 @@ export function registerWorkspaceStatusTool(server: McpServer, config: AppConfig
       },
     },
     async () => {
-      const structuredContent = buildWorkspaceStatus(config);
+      const structuredContent = buildWorkspaceStatus(config, options);
 
       return {
         structuredContent,

@@ -10,12 +10,19 @@ export type WorkspaceStatus = {
   nextSteps: string[];
 };
 
-export function buildWorkspaceStatus(config: AppConfig): WorkspaceStatus {
+export type BuildWorkspaceStatusOptions = {
+  availableTools?: readonly string[];
+};
+
+export function buildWorkspaceStatus(
+  config: AppConfig,
+  { availableTools = [WORKSPACE_STATUS_TOOL_NAME] }: BuildWorkspaceStatusOptions = {},
+): WorkspaceStatus {
   return {
     appName: config.app.name,
     status: "ready_for_local_development",
     mcpEndpoint: `http://localhost:${config.http.port}${config.http.mcpPath}`,
-    availableTools: [WORKSPACE_STATUS_TOOL_NAME],
+    availableTools: [...availableTools],
     nextSteps: [
       "Run npm install.",
       "Start the server with npm run dev.",
