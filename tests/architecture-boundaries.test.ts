@@ -2,10 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = new URL("..", import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 const forbiddenDependencies = [
+  {
+    layer: "filesystem",
+    directory: "src/filesystem",
+    forbiddenPattern: /from\s+["'][^"']*\/tools\//,
+    reason: "filesystem boundaries must not depend on tool contracts or handlers",
+  },
   {
     layer: "services",
     directory: "src/services",

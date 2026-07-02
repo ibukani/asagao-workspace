@@ -5,7 +5,10 @@ import {
   type ToolFailure,
   type ToolResponse,
 } from "../../domain/index.ts";
-import type { WorkspaceRegistry } from "../../services/workspace-registry.ts";
+import {
+  WorkspaceRegistryError,
+  type WorkspaceRegistry,
+} from "../../services/workspace-registry.ts";
 import {
   createWorkspaceInputSchema,
   type CreateWorkspaceInput,
@@ -21,6 +24,7 @@ export const WORKSPACE_LIFECYCLE_ERROR_CODES = {
   invalidInput: "invalid_input",
   workspaceNotFound: "workspace_not_found",
   registryUnavailable: "registry_unavailable",
+  filesystemUnavailable: "filesystem_unavailable",
 } as const;
 
 export type CreateWorkspaceResult = ToolResponse<{
@@ -140,6 +144,28 @@ function withRegistryErrorHandling<Data>(operation: () => ToolResponse<Data>): T
   try {
     return operation();
   } catch (error) {
+    if (error instanceof WorkspaceRegistryError && error.operation === "create") {
+      return toolError(
+        WORKSPACE_LIFECYCLE_ERROR_CODES.filesystemUnavailable,
+        "Local workspace filesystem create operation failed.",
+        {
+          workspaceId: error.workspaceId,
+          message: error.message,
+        },
+      );
+    }
+
+    if (error instanceof WorkspaceRegistryError && error.operation === "delete") {
+      return toolError(
+        WORKSPACE_LIFECYCLE_ERROR_CODES.filesystemUnavailable,
+        "Local workspace filesystem delete operation failed.",
+        {
+          workspaceId: error.workspaceId,
+          message: error.message,
+        },
+      );
+    }
+
     return toolError(
       WORKSPACE_LIFECYCLE_ERROR_CODES.registryUnavailable,
       "Workspace registry operation failed.",

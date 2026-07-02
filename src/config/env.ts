@@ -1,4 +1,8 @@
 import { fileURLToPath } from "node:url";
+import {
+  DEFAULT_WORKSPACE_ROOT,
+  normalizeWorkspaceRootPath,
+} from "../filesystem/workspace-paths.ts";
 
 export const DEFAULT_PORT = 8787;
 export const DEFAULT_MCP_PATH = "/mcp";
@@ -23,6 +27,9 @@ export type AppConfig = {
     widgetUri: string;
     widgetFilePath: string;
   };
+  workspace: {
+    rootPath: string;
+  };
 };
 
 export type ConfigEnvironment = Partial<Record<string, string>>;
@@ -41,6 +48,11 @@ export function loadConfig(env: ConfigEnvironment = process.env): AppConfig {
     ui: {
       widgetUri: env.WIDGET_URI ?? DEFAULT_WIDGET_URI,
       widgetFilePath: fileURLToPath(WIDGET_FILE_URL),
+    },
+    workspace: {
+      rootPath: normalizeWorkspaceRootPath(
+        env.ASAGAO_WORKSPACE_ROOT ?? DEFAULT_WORKSPACE_ROOT,
+      ),
     },
   };
 }

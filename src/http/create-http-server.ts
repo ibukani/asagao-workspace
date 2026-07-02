@@ -32,12 +32,14 @@ type CreateHttpServerOptions = {
   services?: AppServices;
 };
 
-export function createAsagaoHttpServer({
-  config = loadConfig(),
-  createMcpServer = createAsagaoMcpServer,
-  logger = console,
-  services = createAppContext(),
-}: CreateHttpServerOptions = {}): Server {
+export function createAsagaoHttpServer(
+  options: CreateHttpServerOptions = {},
+): Server {
+  const config = options.config ?? loadConfig();
+  const createMcpServer = options.createMcpServer ?? createAsagaoMcpServer;
+  const logger = options.logger ?? console;
+  const services = options.services ?? createAppContext({ config });
+
   return createServer(async (req, res) => {
     if (!req.url) {
       writeText(res, 400, "Missing URL");

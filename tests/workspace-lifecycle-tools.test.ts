@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig } from "../src/config/env.ts";
+import { LocalWorkspaceFilesystem } from "../src/services/local-workspace-filesystem.ts";
 import { WorkspaceRegistry } from "../src/services/workspace-registry.ts";
 import { InMemoryWorkspaceStore } from "../src/storage/in-memory-workspace-store.ts";
 import {
@@ -180,7 +184,7 @@ test("workspace lifecycle registration wires Apps SDK handlers to the shared reg
   const deleted = await deleteHandler({
     workspaceId: createResult.data.workspace.workspaceId,
   });
-  assert.equal(deleted.content[0]?.text, "Workspace marked as deleted.");
+  assert.equal(deleted.content[0]?.text, "Workspace deleted.");
   assert.equal(deleteWorkspaceOutputSchema.safeParse(deleted.structuredContent).success, true);
 
   const listedAfterDelete = await listHandler({});
@@ -206,3 +210,46 @@ function expectListWorkspacesSuccess(response: ListWorkspacesResult) {
   assert.equal(response.ok, true);
   return response;
 }
+
+test("workspace lifecycle model creates and deletes local workspace directories", () => {
+  const parent = mkdtempSync(join(tmpdir(), "asagao-tool-fs-"));
+  try {
+    const workspaceRoot = join(parent, "workspaces");
+    const registry = new WorkspaceRegistry({
+      store: new InMemoryWorkspaceStore(),
+      filesystem: new LocalWorkspaceFilesystem({ workspaceRoot }),
+      clock: () => new Date("2026-07-02T12:00:00.000Z"),
+      createId: () => "wks_toolfs001",
+    });
+
+    const created = buildCreateWorkspaceResult(registry, {});
+    assert.equal(created.ok, true);
+    assert.equal(existsSync(join(workspaceRoot, "wks_toolfs001")), true);
+
+    const deleted = buildDeleteWorkspaceResult(registry, { workspaceId: "wks_toolfs001" });
+    assert.equal(deleted.ok, true);
+    assert.equal(existsSync(join(workspaceRoot, "wks_toolfs001")), false);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("workspace lifecycle model reports filesystem failures as structured failures", () => {
+  const registry = new WorkspaceRegistry({
+    store: new InMemoryWorkspaceStore(),
+    filesystem: {
+      createWorkspaceDirectory: () => {
+        throw new Error("no writable workspace root");
+      },
+      deleteWorkspaceDirectory: () => undefined,
+    },
+    clock: () => new Date("2026-07-02T12:00:00.000Z"),
+    createId: () => "wks_toolfsfail001",
+  });
+
+  const response = buildCreateWorkspaceResult(registry, {});
+
+  assert.equal(response.ok, false);
+  assert.equal(response.error.code, WORKSPACE_LIFECYCLE_ERROR_CODES.filesystemUnavailable);
+  assert.equal(createWorkspaceOutputSchema.safeParse(response).success, true);
+});

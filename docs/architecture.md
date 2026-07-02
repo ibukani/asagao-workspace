@@ -131,7 +131,13 @@ Workspace Runner の共通 model、Zod schema、tool response envelope を定義
 
 配置場所: `src/config/`
 
-環境変数の解析と既定値を担当します。Runtime code は `process.env` を直接読むのではなく、`config` object を受け取って利用します。
+環境変数の解析と既定値を担当します。Runtime code は `process.env` を直接読むのではなく、`config` object を受け取って利用します。`ASAGAO_WORKSPACE_ROOT` は相対パス・絶対パスの両方を受け付け、内部では絶対パスへ正規化します。空文字、NUL byte、URL 形式、filesystem root そのものは拒否します。workspace root が存在しない場合は作成し、directory ではない場合や書き込み不可の場合は明示的な filesystem error として扱います。
+
+### Filesystem boundary layer
+
+配置場所: `src/filesystem/`
+
+Workspace root と workspace 内 path の解決を担当します。ChatGPT-facing tool は host の絶対パスを直接扱わず、`workspaceId + relativePath` を境界へ渡します。この層は workspace root 外、workspace directory 外、prefix 偽装、root 外へ抜ける symlink traversal を拒否します。
 
 ## Tool contract policy
 
@@ -157,7 +163,7 @@ get_workspace
 delete_workspace
 ```
 
-この段階では、in-memory の Workspace record だけを扱います。実際の workspace directory 作成、root directory の作成、patch 適用、shell 実行、clone は行いません。
+この段階では、process-local な Workspace record と local workspace directory を扱います。`create_workspace` は設定された workspace root 配下に workspace directory を作成し、`delete_workspace` は対象 workspace directory だけを削除してから record を `deleted` status へ遷移させます。patch 適用、shell 実行、repository clone は行いません。
 
 共通 response は `ok: true` のとき `data` を持ち、`ok: false` のとき `error` を持つ stable envelope を使います。
 
@@ -178,8 +184,8 @@ filesystem、shell、network、user-data に関わるツールを追加する前
 
 ## 推奨する次のアーキテクチャマイルストーン
 
-1. Config 可能な workspace root と安全な path 境界を追加する。
-2. 書き込み可能なツールを実装する前に `src/security/` 境界を追加する。
-3. 実 filesystem workspace の作成・削除を lifecycle service に接続する。
+1. 書き込み可能なツールを実装する前に `src/security/` 境界を追加する。
+2. Workspace 内 file inspection tool を追加する。
+3. apply_patch と git status/diff tool を追加する。
 4. TypeScript と Zod schema を使い、schema と contract drift を早期に検出できる状態を保つ。
 5. ホスティング先を選定してから、deployment-specific adapter を追加する。

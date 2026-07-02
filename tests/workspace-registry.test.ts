@@ -138,3 +138,90 @@ test("WorkspaceRegistry delete is idempotent and returns null for unknown ids", 
   assert.deepEqual(secondDelete, firstDelete);
   assert.equal(registry.deleteWorkspace("wks_unknown001"), null);
 });
+
+test("WorkspaceRegistry creates local filesystem directories when configured", () => {
+  const calls: string[] = [];
+  const registry = new WorkspaceRegistry({
+    store: new InMemoryWorkspaceStore(),
+    filesystem: {
+      createWorkspaceDirectory: (workspaceId) => calls.push(`create:${workspaceId}`),
+      deleteWorkspaceDirectory: (workspaceId) => calls.push(`delete:${workspaceId}`),
+    },
+    clock: () => createdAt,
+    createId: () => "wks_filesystem001",
+  });
+
+  const workspace = registry.createWorkspace({});
+
+  assert.equal(workspace.status, "ready");
+  assert.deepEqual(calls, ["create:wks_filesystem001"]);
+});
+
+test("WorkspaceRegistry records failed status when filesystem create fails", () => {
+  const store = new InMemoryWorkspaceStore();
+  const registry = new WorkspaceRegistry({
+    store,
+    filesystem: {
+      createWorkspaceDirectory: () => {
+        throw new Error("disk unavailable");
+      },
+      deleteWorkspaceDirectory: () => undefined,
+    },
+    clock: () => createdAt,
+    createId: () => "wks_fail001",
+  });
+
+  assert.throws(() => registry.createWorkspace({}), /Failed to create local filesystem workspace/);
+  assert.equal(store.get("wks_fail001")?.status, "failed");
+});
+
+test("WorkspaceRegistry deletes local filesystem directories before marking records deleted", () => {
+  const calls: string[] = [];
+  const store = new InMemoryWorkspaceStore();
+  const registry = new WorkspaceRegistry({
+    store,
+    filesystem: {
+      createWorkspaceDirectory: (workspaceId) => calls.push(`create:${workspaceId}`),
+      deleteWorkspaceDirectory: (workspaceId) => calls.push(`delete:${workspaceId}`),
+    },
+    clock: () => createdAt,
+    createId: () => "wks_deletefs001",
+  });
+  const workspace = registry.createWorkspace({});
+
+  const deletingRegistry = new WorkspaceRegistry({
+    store,
+    filesystem: {
+      createWorkspaceDirectory: (workspaceId) => calls.push(`create:${workspaceId}`),
+      deleteWorkspaceDirectory: (workspaceId) => calls.push(`delete:${workspaceId}`),
+    },
+    clock: () => deletedAt,
+    createId: () => "wks_unused001",
+  });
+  const deleted = deletingRegistry.deleteWorkspace(workspace.workspaceId);
+
+  assert.equal(deleted?.status, "deleted");
+  assert.deepEqual(calls, ["create:wks_deletefs001", "delete:wks_deletefs001"]);
+});
+
+test("WorkspaceRegistry keeps records undeleted when filesystem delete fails", () => {
+  const store = new InMemoryWorkspaceStore();
+  const registry = new WorkspaceRegistry({
+    store,
+    filesystem: {
+      createWorkspaceDirectory: () => undefined,
+      deleteWorkspaceDirectory: () => {
+        throw new Error("remove failed");
+      },
+    },
+    clock: () => createdAt,
+    createId: () => "wks_deletefail001",
+  });
+  const workspace = registry.createWorkspace({});
+
+  assert.throws(
+    () => registry.deleteWorkspace(workspace.workspaceId),
+    /Failed to delete local filesystem workspace/,
+  );
+  assert.equal(store.get(workspace.workspaceId)?.status, "ready");
+});
