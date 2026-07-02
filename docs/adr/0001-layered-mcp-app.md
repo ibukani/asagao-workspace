@@ -1,4 +1,4 @@
-# ADR 0001: Layered MCP app structure
+# ADR 0001: レイヤー分けされた MCP app 構成
 
 ## Status
 
@@ -6,39 +6,39 @@ Accepted
 
 ## Context
 
-The initial scaffold placed MCP server creation, Apps SDK UI resource registration, tool registration, HTTP handling, CORS handling, and process startup in a single `server.js` file.
+初期 scaffold では、MCP サーバー作成、Apps SDK UI resource 登録、tool 登録、HTTP handling、CORS handling、process startup が単一の `server.js` に置かれていました。
 
-That shape is acceptable for a throwaway MVP, but it becomes hard to extend once the app adds file tools, authentication, persistence, safety checks, multiple UI resources, or deployment-specific behavior.
+使い捨ての MVP であれば、この形でも問題ありません。しかし、file tool、authentication、persistence、safety check、複数 UI resource、deployment-specific behavior を追加し始めると、この構成は拡張しづらくなります。
 
 ## Decision
 
-Use a layered JavaScript structure:
+レイヤー分けされた JavaScript 構成を使います。
 
-- `server.js` remains a thin process entrypoint.
-- `src/runtime/` owns startup and lifecycle.
-- `src/http/` owns HTTP routing and MCP transport handling.
-- `src/app/` owns MCP server composition.
-- `src/ui/` owns Apps SDK resource registration.
-- `src/tools/` owns tool registration and tool-specific pure model logic.
-- `src/config/` owns environment parsing.
-- `docs/` records architectural decisions.
+- `server.js` は薄い process entrypoint のままにする。
+- `src/runtime/` は startup と lifecycle を担当する。
+- `src/http/` は HTTP routing と MCP transport handling を担当する。
+- `src/app/` は MCP server composition を担当する。
+- `src/ui/` は Apps SDK resource registration を担当する。
+- `src/tools/` は tool registration と tool-specific な純粋 model logic を担当する。
+- `src/config/` は environment parsing を担当する。
+- `docs/` は architecture decision を記録する。
 
-Tool modules should separate pure output-building/model logic from Apps SDK registration so behavior can be tested without starting the MCP server.
+Tool module では、pure output-building/model logic と Apps SDK registration を分離します。これにより、MCP サーバーを起動せずに behavior をテストできます。
 
 ## Consequences
 
 Positive:
 
-- New tools have an obvious place to live.
-- HTTP transport and app behavior can evolve independently.
-- Tests can cover config and tool behavior without booting the server.
-- Future security, storage, and service layers can be introduced without rewriting the entrypoint.
+- 新しい tool の置き場所が明確になる。
+- HTTP transport と app behavior を独立して発展させられる。
+- サーバーを起動しなくても config と tool behavior をテストできる。
+- 将来の security、storage、service layer を、entrypoint を書き換えずに導入できる。
 
 Tradeoffs:
 
-- There are more files than a minimal single-file scaffold.
-- Plain JavaScript cannot enforce all interface boundaries at compile time.
+- 最小構成の single-file scaffold よりも file 数が増える。
+- Plain JavaScript では、すべての interface boundary を compile time に強制できない。
 
 ## Follow-up
 
-Consider moving to TypeScript when the tool surface grows enough that schema and contract drift becomes a real maintenance cost.
+Tool surface が十分に大きくなり、schema と contract drift が現実的な保守コストになった段階で、TypeScript への移行を検討します。
