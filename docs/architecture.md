@@ -4,6 +4,24 @@ Asagao Workspace is structured as a small but extensible ChatGPT App built aroun
 
 The current goal is not to add many capabilities early. The goal is to keep the extension points explicit so future file tools, authentication, persistence, safety checks, and UI screens can be added without turning the entrypoint into a monolith.
 
+## Product direction
+
+Asagao Workspace should be treated as a safe development Workspace Runner for ChatGPT, not as a generic GitHub App clone.
+
+The app should focus on the capabilities that ChatGPT currently lacks inside the chat environment:
+
+- isolated workspaces
+- multi-file patch and artifact application
+- command execution with asynchronous job polling
+- command logs and validation evidence
+- workspace diffs and git status
+- snapshots and rollback
+- patch, archive, or change-set export
+
+Simple source-host operations such as listing issues, reading pull requests, posting comments, or editing GitHub metadata should stay outside the core product unless they are directly required to materialize a validated workspace change set.
+
+See [`docs/workspace-runner-design.md`](workspace-runner-design.md) for the detailed design direction.
+
 ## Principles
 
 1. Keep `server.js` thin.
@@ -12,6 +30,7 @@ The current goal is not to add many capabilities early. The goal is to keep the 
 4. Keep ChatGPT-facing tool contracts stable and structured.
 5. Add write-capable or local-PC-capable tools only after an explicit safety design.
 6. Prefer small modules that can be tested without starting an HTTP server.
+7. Keep the core domain source-host agnostic. GitHub can be a source or destination, but the primary domain model should be Workspace, Command Job, Artifact, Snapshot, and Change Set.
 
 ## Layers
 
@@ -112,6 +131,7 @@ Until that exists, this project should avoid arbitrary local shell execution and
 
 1. Add a `src/security/` boundary before implementing write-capable tools.
 2. Add a `src/storage/` boundary only when the first persistent state requirement is clear.
-3. Add a `src/services/` boundary if tool handlers start sharing nontrivial app logic.
-4. Add TypeScript once the tool surface grows beyond a few modules or schemas become difficult to maintain in plain JavaScript.
-5. Add deployment-specific adapters only after choosing the hosting target.
+3. Add domain models for Workspace, Command Job, Artifact, Snapshot, and Change Set before implementing the real runner.
+4. Add a `src/services/` boundary if tool handlers start sharing nontrivial app logic.
+5. Add TypeScript once the tool surface grows beyond a few modules or schemas become difficult to maintain in plain JavaScript.
+6. Add deployment-specific adapters only after choosing the hosting target.
