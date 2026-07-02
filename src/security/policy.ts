@@ -19,7 +19,7 @@ import {
   type SecretPolicy,
 } from "./secrets.ts";
 
-export const runnerOperationKinds = ["file", "patch", "command", "artifact", "lifecycle"] as const;
+export const runnerOperationKinds = ["file", "git", "patch", "command", "artifact", "lifecycle"] as const;
 
 export const fileOperationActions = [
   "list_files",
@@ -27,6 +27,11 @@ export const fileOperationActions = [
   "read_file",
   "write_file",
   "delete_file",
+] as const;
+
+export const gitOperationActions = [
+  "get_git_status",
+  "get_workspace_diff",
 ] as const;
 
 export const patchOperationActions = [
@@ -58,6 +63,7 @@ export const lifecycleOperationActions = [
 
 export const runnerOperationActions = [
   ...fileOperationActions,
+  ...gitOperationActions,
   ...patchOperationActions,
   ...commandOperationActions,
   ...artifactOperationActions,
@@ -99,6 +105,14 @@ export const fileOperationPolicySchema = z
   })
   .strict();
 
+export const gitOperationPolicySchema = z
+  .object({
+    allowStatus: z.boolean(),
+    allowDiff: z.boolean(),
+    maxPatchBytes: z.number().int().positive(),
+  })
+  .strict();
+
 export const patchOperationPolicySchema = z
   .object({
     allowApply: z.boolean(),
@@ -134,6 +148,7 @@ export const workspaceSecurityPolicySchema = z
     secrets: secretPolicySchema,
     command: commandPolicySchema,
     file: fileOperationPolicySchema,
+    git: gitOperationPolicySchema,
     patch: patchOperationPolicySchema,
     artifact: artifactOperationPolicySchema,
     lifecycle: lifecycleOperationPolicySchema,
@@ -157,6 +172,7 @@ export type RunnerOperationAction = z.infer<typeof runnerOperationActionSchema>;
 export type SecurityActor = z.infer<typeof securityActorSchema>;
 export type WorkspaceRelativePath = z.infer<typeof workspaceRelativePathSchema>;
 export type FileOperationPolicy = z.infer<typeof fileOperationPolicySchema>;
+export type GitOperationPolicy = z.infer<typeof gitOperationPolicySchema>;
 export type PatchOperationPolicy = z.infer<typeof patchOperationPolicySchema>;
 export type ArtifactOperationPolicy = z.infer<typeof artifactOperationPolicySchema>;
 export type LifecycleOperationPolicy = z.infer<typeof lifecycleOperationPolicySchema>;
@@ -168,6 +184,7 @@ export type CreateWorkspaceSecurityPolicyOverrides = {
   secrets?: Partial<SecretPolicy>;
   command?: Partial<CommandPolicy>;
   file?: Partial<FileOperationPolicy>;
+  git?: Partial<GitOperationPolicy>;
   patch?: Partial<PatchOperationPolicy>;
   artifact?: Partial<ArtifactOperationPolicy>;
   lifecycle?: Partial<LifecycleOperationPolicy>;
@@ -182,6 +199,12 @@ export const DEFAULT_FILE_OPERATION_POLICY = fileOperationPolicySchema.parse({
   maxReadBytes: 1_000_000,
   deniedPathPrefixes: [".git/", "node_modules/", ".asagao/"],
 }) satisfies FileOperationPolicy;
+
+export const DEFAULT_GIT_OPERATION_POLICY = gitOperationPolicySchema.parse({
+  allowStatus: true,
+  allowDiff: true,
+  maxPatchBytes: 2_000_000,
+}) satisfies GitOperationPolicy;
 
 export const DEFAULT_PATCH_OPERATION_POLICY = patchOperationPolicySchema.parse({
   allowApply: false,
@@ -228,6 +251,10 @@ export function createWorkspaceSecurityPolicy(
       ...overrides.file,
       deniedPathPrefixes: overrides.file?.deniedPathPrefixes
         ?? DEFAULT_FILE_OPERATION_POLICY.deniedPathPrefixes,
+    },
+    git: {
+      ...DEFAULT_GIT_OPERATION_POLICY,
+      ...overrides.git,
     },
     patch: {
       ...DEFAULT_PATCH_OPERATION_POLICY,
@@ -283,6 +310,8 @@ export function evaluateWorkspaceOperationPolicy(
   switch (operation.operationKind) {
     case "file":
       return evaluateFileOperationPolicy(policy.file, operation.action);
+    case "git":
+      return evaluateGitOperationPolicy(policy.git, operation.action);
     case "patch":
       return evaluatePatchOperationPolicy(policy.patch, operation.action);
     case "command":
@@ -297,6 +326,10 @@ export function evaluateWorkspaceOperationPolicy(
 export function inferOperationKind(action: RunnerOperationAction): RunnerOperationKind {
   if (includesAction(fileOperationActions, action)) {
     return "file";
+  }
+
+  if (includesAction(gitOperationActions, action)) {
+    return "git";
   }
 
   if (includesAction(patchOperationActions, action)) {
@@ -341,6 +374,24 @@ function evaluateFileOperationPolicy(
         : denyDecision("file_delete_denied", "File delete is denied by workspace file policy.");
     default:
       return denyDecision("unsupported_file_action", "Unsupported file operation action.");
+  }
+}
+
+function evaluateGitOperationPolicy(
+  policy: GitOperationPolicy,
+  action: RunnerOperationAction,
+): PolicyDecision {
+  switch (action) {
+    case "get_git_status":
+      return policy.allowStatus
+        ? allowDecision("Git status inspection is allowed by workspace git policy.")
+        : denyDecision("git_status_denied", "Git status inspection is denied by workspace git policy.");
+    case "get_workspace_diff":
+      return policy.allowDiff
+        ? allowDecision("Workspace diff inspection is allowed by workspace git policy.")
+        : denyDecision("git_diff_denied", "Workspace diff inspection is denied by workspace git policy.");
+    default:
+      return denyDecision("unsupported_git_action", "Unsupported git operation action.");
   }
 }
 

@@ -183,7 +183,7 @@ get_workspace_diff
 
 Issue #19 では、`get_file_tree`、`read_file`、`search_workspace` を読み取り専用 tool として実装します。`get_file_tree` は flat list + depth で取得量を制限し、`read_file` は UTF-8 text file のみを line / byte limit 付きで返し、`search_workspace` は Phase 1 では literal keyword search のみを提供します。`read_files_batch` は aggregate response limit と partial failure semantics を別途設計するため、この phase では公開しません。
 
-ChatGPT は patch や command によって生じた実際の結果を確認する必要があるため、`get_workspace_diff` は第一級の tool とします。
+Issue #10 では、ChatGPT が patch 適用後や command 実行後の実際の変更結果を確認できるように、`get_git_status` と `get_workspace_diff` を読み取り専用の git inspection tool として実装します。`get_git_status` は changed files と per-file status を返し、`get_workspace_diff` は changed files、diffstat、size-limited patch body を返します。binary、deleted、untracked、非 git workspace、巨大 diff は structured metadata / structured failure として扱います。
 
 ### Patch and artifact input
 
@@ -277,7 +277,7 @@ export_workspace_archive
 
 ## Safety requirements
 
-file、command、repository、network、artifact に関わる tool は、すべて sandboxed operation として設計する必要があります。
+file、git、command、repository、network、artifact に関わる tool は、すべて sandboxed operation として設計する必要があります。
 
 最低要件:
 

@@ -9,6 +9,7 @@ Asagao Workspace は、OpenAI Apps SDK と Model Context Protocol（MCP）サー
 - 読み取り専用のスターターツール: `get_workspace_status`。
 - Workspace lifecycle ツール: `create_workspace`、`list_workspaces`、`get_workspace`、`delete_workspace`、`get_workspace_lifecycle`。
 - Workspace inspection ツール: `get_file_tree`、`read_file`、`search_workspace`。
+- Workspace git inspection ツール: `get_git_status`、`get_workspace_diff`。
 - Workspace Runner の中核となる domain model: Workspace、Command Job、Artifact、Snapshot、Change Set。
 - Workspace lifecycle 系ツールの contract schema、handler model、local workspace directory 管理、TTL / dirty / busy / reusable 判定境界。
 - Runner 操作向けの security boundary、workspace policy、command policy、lifecycle policy、audit event model、log masking 拡張点。
@@ -177,6 +178,19 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 
 `read_files_batch` は Issue #19 Phase 1 では公開しません。単一 `read_file` の policy、audit、上限、binary handling を安定させてから、必要であれば後続Issueで batch API と aggregate limit を設計します。
 
+## Workspace git inspection tools
+
+`src/tools/workspace-git/` には、Workspace 内の git work tree を読み取り専用で検査する tool contract と handler model を定義しています。
+
+- `get_git_status`
+- `get_workspace_diff`
+
+これらの tool は fixed-argument の `git` invocation だけを使い、任意 shell command は実行しません。`src/security/` の git operation policy を通し、audit event を記録します。ChatGPT-facing な structured result には workspace-relative path だけを含め、ホスト側の絶対パスは返しません。`.git/` の直接 file read は引き続き file policy で拒否されますが、git inspection tool は git command 経由で status / diff を取得できます。
+
+`get_git_status` は branch、HEAD commit、clean 判定、changed files、file ごとの status、staged / unstaged / untracked / conflicted flag、`maxFiles` による truncation metadata を返します。非 git workspace は曖昧な空結果ではなく `not_git_workspace` の structured failure として扱います。
+
+`get_workspace_diff` は changed files、diffstat、必要に応じて patch 本文を返します。patch 本文は `maxPatchBytes` と git policy の `maxPatchBytes` で上限化され、巨大 diff でも result envelope が壊れないよう `patch.truncated` と `patch.omittedReason` を返します。deleted file は deleted status と通常の git patch、binary file は `binary: true` として扱い、untracked text file は new file patch を生成します。
+
 ## Runner security boundary
 
 `src/security/` は、将来の file、patch、command、artifact、lifecycle 操作が共有する安全境界です。現在は実行ツール本体ではなく、次の基盤を提供します。
@@ -185,7 +199,7 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 - `none`、`package_registry`、`full` の internet policy。既定値は `none`。
 - command allowlist / denylist policy。既定値は `deny_all`。
 - secret を標準では注入しない policy。
-- lifecycle claim/reset/clean 操作を含む audit event の共通形式と recorder interface。
+- git status / diff inspection と lifecycle claim/reset/clean 操作を含む audit event の共通形式と recorder interface。
 - audit metadata や command log に適用できる log masking extension point。
 
 repository clone、patch 適用、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。これらを追加する場合は、実際の副作用を起こす前に `src/security/` の policy を参照し、audit event を記録する必要があります。
@@ -202,7 +216,7 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 
 ## 次のステップ
 
-1. git status / workspace diff tool を追加し、dirty 判定を実データへ接続する。
+1. `get_git_status` / `get_workspace_diff` の実データを lifecycle dirty marker 更新へ接続する。
 2. apply_patch tool を追加し、dirty marker を更新する。
 3. command job 基盤を追加し、busy marker を更新する。
 4. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。

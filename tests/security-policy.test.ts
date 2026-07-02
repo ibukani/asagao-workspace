@@ -30,6 +30,9 @@ test("workspace security policy defaults to explicit default-deny behavior", () 
   assert.deepEqual(policy.secrets.allowedSecretNames, []);
   assert.equal(policy.command.mode, "deny_all");
   assert.deepEqual(policy.command.allowlist, []);
+  assert.equal(policy.git.allowStatus, true);
+  assert.equal(policy.git.allowDiff, true);
+  assert.equal(policy.git.maxPatchBytes, 2_000_000);
   assert.equal(policy.patch.allowApply, false);
   assert.equal(policy.artifact.allowExport, false);
   assert.equal(policy.lifecycle.allowGet, true);
@@ -118,7 +121,7 @@ test("workspace relative path schema rejects unsafe paths", () => {
   }
 });
 
-test("workspace operation policy covers file, patch, command, artifact, and lifecycle operations", () => {
+test("workspace operation policy covers file, git, patch, command, artifact, and lifecycle operations", () => {
   const policy = createWorkspaceSecurityPolicy(workspace);
 
   assert.equal(
@@ -141,6 +144,26 @@ test("workspace operation policy covers file, patch, command, artifact, and life
       relativePath: "src/index.ts",
     })).reasonCode,
     "file_write_denied",
+  );
+
+  assert.equal(
+    evaluateWorkspaceOperationPolicy(policy, runnerOperationRequestSchema.parse({
+      workspaceId: "wks_security001",
+      operationKind: "git",
+      action: "get_git_status",
+      actor: "assistant",
+    })).outcome,
+    "allowed",
+  );
+
+  assert.equal(
+    evaluateWorkspaceOperationPolicy(policy, runnerOperationRequestSchema.parse({
+      workspaceId: "wks_security001",
+      operationKind: "git",
+      action: "get_workspace_diff",
+      actor: "assistant",
+    })).outcome,
+    "allowed",
   );
 
   assert.equal(

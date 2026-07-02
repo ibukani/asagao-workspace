@@ -28,6 +28,7 @@ test("app context wires runner security services", () => {
       context.workspaceLifecycleService.getWorkspaceLifecycle(workspace.workspaceId)?.lifecycle.reusable,
       true,
     );
+    assert.equal(context.workspaceGitService.constructor.name, "WorkspaceGitService");
     assert.equal(context.security.logMasker.maskText("plain"), "plain");
   } finally {
     rmSync(parent, { recursive: true, force: true });
