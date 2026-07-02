@@ -8,6 +8,7 @@ Asagao Workspace は、OpenAI Apps SDK と Model Context Protocol（MCP）サー
 - ChatGPT Apps 用の小さな iframe UI リソース。
 - 読み取り専用のスターターツール: `get_workspace_status`。
 - Workspace lifecycle ツール: `create_workspace`、`list_workspaces`、`get_workspace`、`delete_workspace`、`get_workspace_lifecycle`。
+- Workspace inspection ツール: `get_file_tree`、`read_file`、`search_workspace`。
 - Workspace Runner の中核となる domain model: Workspace、Command Job、Artifact、Snapshot、Change Set。
 - Workspace lifecycle 系ツールの contract schema、handler model、local workspace directory 管理、TTL / dirty / busy / reusable 判定境界。
 - Runner 操作向けの security boundary、workspace policy、command policy、lifecycle policy、audit event model、log masking 拡張点。
@@ -156,7 +157,25 @@ ASAGAO_WORKSPACE_ROOT=.asagao/workspaces
 
 Workspace path の解決は `workspaceId + relativePath` の形に閉じ、root 外・workspace 外へ出る path traversal と、root 外へ抜ける symlink traversal を拒否します。ChatGPT-facing な tool output にはホスト側の絶対パスを露出しません。
 
-repository clone、patch 適用、shell 実行、file read/write tool、git reset / git clean の実処理はまだ行いません。
+repository clone、patch 適用、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。
+
+## Workspace inspection tools
+
+`src/tools/workspace-inspection/` には、Workspace 内のファイルを読み取り専用で検査する tool contract と handler model を定義しています。
+
+- `get_file_tree`
+- `read_file`
+- `search_workspace`
+
+これらの tool は `workspaceId + workspace-relative path` に閉じて動作します。ホスト側の絶対パスは tool output に含めません。path traversal、絶対パス、Windows drive prefix、NUL byte、workspace 外へ抜ける symlink traversal は fail-closed で拒否します。
+
+`get_file_tree` は flat list + `depth` の形式で file tree を返します。`.git/`、`node_modules/`、`.asagao/` など workspace file policy の denied prefix は省略され、symlink は辿らず `symlink` entry として扱います。`maxDepth` と `maxEntries` によって取得量を制限します。
+
+`read_file` は UTF-8 text file のみを返します。`startLine`、`maxLines`、`maxBytes` を受け取り、binary file と directory / symlink / other file type は本文を返さず structured failure にします。`maxBytes` は workspace file policy の `maxReadBytes` と hard limit の小さい方で上限化されます。
+
+`search_workspace` は Phase 1 では regex ではなく literal keyword search です。UTF-8 text file のみを対象にし、binary、too-large、denied、unreadable file は skip count として返します。`maxResults`、`maxFileBytes`、match line snippet の上限で response size を制限します。
+
+`read_files_batch` は Issue #19 Phase 1 では公開しません。単一 `read_file` の policy、audit、上限、binary handling を安定させてから、必要であれば後続Issueで batch API と aggregate limit を設計します。
 
 ## Runner security boundary
 
@@ -169,7 +188,7 @@ repository clone、patch 適用、shell 実行、file read/write tool、git rese
 - lifecycle claim/reset/clean 操作を含む audit event の共通形式と recorder interface。
 - audit metadata や command log に適用できる log masking extension point。
 
-repository clone、patch 適用、shell 実行、file read/write tool、git reset / git clean の実処理はまだ行いません。これらを追加する場合は、実際の副作用を起こす前に `src/security/` の policy を参照し、audit event を記録する必要があります。
+repository clone、patch 適用、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。これらを追加する場合は、実際の副作用を起こす前に `src/security/` の policy を参照し、audit event を記録する必要があります。
 
 
 ## 新しいツールを追加する
@@ -183,9 +202,8 @@ repository clone、patch 適用、shell 実行、file read/write tool、git rese
 
 ## 次のステップ
 
-1. Workspace 内 file inspection tool を追加する。
-2. git status / workspace diff tool を追加し、dirty 判定を実データへ接続する。
-3. apply_patch tool を追加し、dirty marker を更新する。
-4. command job 基盤を追加し、busy marker を更新する。
-5. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。
-6. 対象のホスティング基盤を選定してからデプロイ設定を追加する。
+1. git status / workspace diff tool を追加し、dirty 判定を実データへ接続する。
+2. apply_patch tool を追加し、dirty marker を更新する。
+3. command job 基盤を追加し、busy marker を更新する。
+4. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。
+5. 対象のホスティング基盤を選定してからデプロイ設定を追加する。
