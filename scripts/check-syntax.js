@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { statSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -11,10 +11,10 @@ for (const target of TARGETS) {
 }
 
 function* collectJavaScriptFiles(path) {
-  let entries;
+  let stat;
 
   try {
-    entries = readdirSync(path, { withFileTypes: true });
+    stat = statSync(path);
   } catch (error) {
     if (error?.code === "ENOENT") {
       return;
@@ -22,11 +22,18 @@ function* collectJavaScriptFiles(path) {
     throw error;
   }
 
-  if (entries.length === undefined) {
+  if (stat.isFile()) {
+    if (path.endsWith(".js")) {
+      yield path;
+    }
     return;
   }
 
-  for (const entry of entries) {
+  if (!stat.isDirectory()) {
+    return;
+  }
+
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
     const entryPath = join(path, entry.name);
     if (entry.isDirectory()) {
       yield* collectJavaScriptFiles(entryPath);
@@ -36,9 +43,5 @@ function* collectJavaScriptFiles(path) {
     if (entry.isFile() && entry.name.endsWith(".js")) {
       yield entryPath;
     }
-  }
-
-  if (path.endsWith(".js")) {
-    yield path;
   }
 }
