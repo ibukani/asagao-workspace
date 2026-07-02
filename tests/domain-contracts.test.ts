@@ -22,7 +22,7 @@ const validWorkspace = {
   updatedAt: now,
   expiresAt: "2026-07-02T13:00:00.000Z",
   runtimeProfile: "node",
-  internetPolicy: "restricted",
+  internetPolicy: "package_registry",
   source: {
     type: "git",
     repoUrl: "https://github.com/example/project.git",
