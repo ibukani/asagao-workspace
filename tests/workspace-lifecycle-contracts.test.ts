@@ -28,7 +28,7 @@ const workspace = {
   updatedAt: "2026-07-02T12:00:00.000Z",
   expiresAt: "2026-07-02T13:00:00.000Z",
   runtimeProfile: "python",
-  internetPolicy: "disabled",
+  internetPolicy: "none",
   source: {
     type: "empty",
   },
@@ -61,7 +61,7 @@ test("create_workspace input accepts optional fields and validates enums", () =>
       baseRef: "origin/main",
       workspaceName: "Example",
       runtimeProfile: "rust",
-      internetPolicy: "restricted",
+      internetPolicy: "package_registry",
       ttlMinutes: 60,
     }).success,
     true,
@@ -70,6 +70,9 @@ test("create_workspace input accepts optional fields and validates enums", () =>
   assert.equal(createWorkspaceInputSchema.safeParse({ baseRef: "origin/main" }).success, false);
   assert.equal(createWorkspaceInputSchema.safeParse({ runtimeProfile: "go" }).success, false);
   assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "open" }).success, false);
+  assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "restricted" }).success, false);
+  assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "disabled" }).success, false);
+  assert.equal(createWorkspaceInputSchema.safeParse({ internetPolicy: "enabled" }).success, false);
   assert.equal(createWorkspaceInputSchema.safeParse({ ttlMinutes: -1 }).success, false);
 });
 
