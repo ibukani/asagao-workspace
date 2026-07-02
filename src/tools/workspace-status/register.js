@@ -14,7 +14,11 @@ const outputSchema = {
   nextSteps: z.array(z.string()),
 };
 
-export function registerWorkspaceStatusTool(server, config) {
+export function registerWorkspaceStatusTool(
+  server,
+  config,
+  { availableTools } = {},
+) {
   registerAppTool(
     server,
     WORKSPACE_STATUS_TOOL_NAME,
@@ -30,7 +34,7 @@ export function registerWorkspaceStatusTool(server, config) {
       },
     },
     async () => {
-      const structuredContent = buildWorkspaceStatus(config);
+      const structuredContent = buildWorkspaceStatus(config, { availableTools });
 
       return {
         structuredContent,
