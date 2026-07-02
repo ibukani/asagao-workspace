@@ -8,7 +8,9 @@ import {
   createWorkspaceSecurityPolicy,
   evaluateCommandPolicy,
   evaluateWorkspaceOperationPolicy,
+  normalizeWorkspaceRelativePath,
   runnerOperationRequestSchema,
+  workspaceRelativePathSchema,
   workspaceSecurityPolicySchema,
 } from "../src/security/index.ts";
 import { internetPolicySchema } from "../src/domain/index.ts";
@@ -80,6 +82,36 @@ test("command denylist takes precedence over allowlist", () => {
 
   assert.equal(decision.outcome, "denied");
   assert.equal(decision.reasonCode, "command_denied");
+});
+
+
+
+test("workspace relative path schema normalizes safe relative paths", () => {
+  assert.equal(workspaceRelativePathSchema.parse("./src//security\\policy.ts"), "src/security/policy.ts");
+  assert.equal(workspaceRelativePathSchema.parse("docs/./workspace-runner-design.md"), "docs/workspace-runner-design.md");
+
+  const normalized = normalizeWorkspaceRelativePath("src//security/policy.ts");
+  assert.equal(normalized.success, true);
+  if (normalized.success) {
+    assert.equal(normalized.relativePath, "src/security/policy.ts");
+  }
+});
+
+test("workspace relative path schema rejects unsafe paths", () => {
+  for (const relativePath of [
+    "foo/../.git/config",
+    "../.git/config",
+    "/tmp/asagao",
+    "C:\\Users\\asagao\\secret.txt",
+    "   ",
+    "src/\0secret",
+  ]) {
+    assert.equal(
+      workspaceRelativePathSchema.safeParse(relativePath).success,
+      false,
+      `expected unsafe path to be rejected: ${JSON.stringify(relativePath)}`,
+    );
+  }
 });
 
 test("workspace operation policy covers file, patch, command, and artifact operations", () => {
@@ -163,4 +195,20 @@ test("workspace operation policy rejects mismatched workspace and denied file pr
     })).reasonCode,
     "path_denied",
   );
+});
+
+
+test("workspace operation policy fails closed for unparsed unsafe relative paths", () => {
+  const policy = createWorkspaceSecurityPolicy(workspace);
+
+  const decision = evaluateWorkspaceOperationPolicy(policy, {
+    workspaceId: "wks_security001",
+    operationKind: "file",
+    action: "read_file",
+    actor: "assistant",
+    relativePath: "foo/../.git/config",
+  });
+
+  assert.equal(decision.outcome, "denied");
+  assert.equal(decision.reasonCode, "invalid_relative_path");
 });

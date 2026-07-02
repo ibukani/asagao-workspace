@@ -188,6 +188,7 @@ delete_workspace
 - data retention
 - error behavior
 - unsafe input に対するテストケース
+- workspace relative path の正規化と `..` / 絶対パス / drive prefix / NUL byte の fail-closed 拒否
 
 この boundary と具体的な operation policy が存在しない状態で、任意のローカル shell 実行や広範な filesystem access は追加しません。
 

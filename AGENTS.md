@@ -54,6 +54,7 @@ npm run inspect
 - Command execution must be denied by default unless an explicit allowlist policy permits it.
 - User secrets must not be injected into runner operations by default.
 - Runner operations should emit audit events through the security boundary.
+- Runner file and patch operations must pass only normalized workspace-relative paths. Reject `..`, absolute paths, drive prefixes, and NUL bytes fail-closed at the security boundary.
 - Keep security boundary code independent from `src/tools/`, `src/app/`, `src/http/`, and `src/runtime/` wiring.
 
 ## Adding a tool

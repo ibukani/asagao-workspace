@@ -317,7 +317,7 @@ Workspace ごとの policy は次の関心事を分離します。
 - `internetPolicy`: `none`、`package_registry`、`full` のいずれか。既定値は `none`。
 - `secrets`: secret は標準では注入しない。`injectByDefault` は常に `false`。
 - `command`: command execution は既定で `deny_all`。明示的な allowlist がある場合のみ許可できる。
-- `file`: read/list/search は policy で明示され、write/delete は既定で拒否される。
+- `file`: read/list/search は policy で明示され、write/delete は既定で拒否される。`relativePath` は `src/security/` 境界で POSIX 形式へ正規化され、絶対パス、drive prefix、NUL byte、`..` segment は fail-closed で拒否される。
 - `patch`: patch application は既定で拒否され、preflight を要求する。
 - `artifact`: artifact create/read は許可可能だが、delete/export は既定で拒否される。
 

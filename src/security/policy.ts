@@ -1,3 +1,4 @@
+import { posix as pathPosix } from "node:path";
 import { z } from "zod";
 import {
   internetPolicySchema,
@@ -57,9 +58,26 @@ export const runnerOperationActions = [
 
 export const securityActors = ["assistant", "user", "system", "unknown"] as const;
 
+export const WORKSPACE_RELATIVE_PATH_ERROR_CODE = "invalid_relative_path" as const;
+
 export const runnerOperationKindSchema = z.enum(runnerOperationKinds);
 export const runnerOperationActionSchema = z.enum(runnerOperationActions);
 export const securityActorSchema = z.enum(securityActors);
+export const workspaceRelativePathSchema = z
+  .string()
+  .min(1)
+  .transform((rawPath, context) => {
+    const normalizedPath = normalizeWorkspaceRelativePath(rawPath);
+    if (!normalizedPath.success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: normalizedPath.message,
+      });
+      return z.NEVER;
+    }
+
+    return normalizedPath.relativePath;
+  });
 
 export const fileOperationPolicySchema = z
   .object({
@@ -69,7 +87,7 @@ export const fileOperationPolicySchema = z
     allowWrite: z.boolean(),
     allowDelete: z.boolean(),
     maxReadBytes: z.number().int().positive(),
-    deniedPathPrefixes: z.array(z.string().min(1)),
+    deniedPathPrefixes: z.array(workspaceRelativePathSchema),
   })
   .strict();
 
@@ -111,7 +129,7 @@ export const runnerOperationRequestSchema = z
     action: runnerOperationActionSchema,
     actor: securityActorSchema.default("unknown"),
     command: z.array(z.string()).optional(),
-    relativePath: z.string().min(1).optional(),
+    relativePath: workspaceRelativePathSchema.optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
@@ -119,6 +137,7 @@ export const runnerOperationRequestSchema = z
 export type RunnerOperationKind = z.infer<typeof runnerOperationKindSchema>;
 export type RunnerOperationAction = z.infer<typeof runnerOperationActionSchema>;
 export type SecurityActor = z.infer<typeof securityActorSchema>;
+export type WorkspaceRelativePath = z.infer<typeof workspaceRelativePathSchema>;
 export type FileOperationPolicy = z.infer<typeof fileOperationPolicySchema>;
 export type PatchOperationPolicy = z.infer<typeof patchOperationPolicySchema>;
 export type ArtifactOperationPolicy = z.infer<typeof artifactOperationPolicySchema>;
@@ -213,11 +232,21 @@ export function evaluateWorkspaceOperationPolicy(
     );
   }
 
-  if (operation.relativePath !== undefined && pathMatchesDeniedPrefix(operation.relativePath, policy.file.deniedPathPrefixes)) {
-    return denyDecision(
-      "path_denied",
-      `Path '${operation.relativePath}' is denied by workspace file policy.`,
-    );
+  if (operation.relativePath !== undefined) {
+    const normalizedPath = normalizeWorkspaceRelativePath(operation.relativePath);
+    if (!normalizedPath.success) {
+      return denyDecision(
+        WORKSPACE_RELATIVE_PATH_ERROR_CODE,
+        normalizedPath.message,
+      );
+    }
+
+    if (pathMatchesDeniedPrefix(normalizedPath.relativePath, policy.file.deniedPathPrefixes)) {
+      return denyDecision(
+        "path_denied",
+        `Path '${normalizedPath.relativePath}' is denied by workspace file policy.`,
+      );
+    }
   }
 
   switch (operation.operationKind) {
@@ -340,12 +369,75 @@ function evaluateArtifactOperationPolicy(
   }
 }
 
+export type NormalizeWorkspaceRelativePathResult =
+  | {
+    success: true;
+    relativePath: string;
+  }
+  | {
+    success: false;
+    reasonCode: typeof WORKSPACE_RELATIVE_PATH_ERROR_CODE;
+    message: string;
+  };
+
+export function normalizeWorkspaceRelativePath(rawPath: string): NormalizeWorkspaceRelativePathResult {
+  const slashNormalizedPath = rawPath.replaceAll("\\", "/");
+
+  if (slashNormalizedPath.includes("\0")) {
+    return invalidRelativePath("Workspace relative path must not contain NUL bytes.");
+  }
+
+  if (slashNormalizedPath.trim() === "") {
+    return invalidRelativePath("Workspace relative path must not be empty.");
+  }
+
+  if (pathPosix.isAbsolute(slashNormalizedPath)) {
+    return invalidRelativePath(`Workspace relative path must not be absolute: ${rawPath}`);
+  }
+
+  if (/^[A-Za-z]:($|\/)/.test(slashNormalizedPath)) {
+    return invalidRelativePath(`Workspace relative path must not include a drive prefix: ${rawPath}`);
+  }
+
+  if (slashNormalizedPath.split("/").includes("..")) {
+    return invalidRelativePath(`Workspace relative path must not contain parent directory segments: ${rawPath}`);
+  }
+
+  const normalizedPath = stripTrailingSlashes(pathPosix.normalize(slashNormalizedPath));
+  if (normalizedPath === "." || normalizedPath === "") {
+    return invalidRelativePath("Workspace relative path must not resolve to the current directory.");
+  }
+
+  if (pathPosix.isAbsolute(normalizedPath) || normalizedPath === ".." || normalizedPath.startsWith("../")) {
+    return invalidRelativePath(`Workspace relative path escapes the workspace boundary: ${rawPath}`);
+  }
+
+  if (normalizedPath.split("/").includes("..")) {
+    return invalidRelativePath(`Workspace relative path must not contain parent directory segments: ${rawPath}`);
+  }
+
+  return { success: true, relativePath: normalizedPath };
+}
+
+function stripTrailingSlashes(normalizedPath: string): string {
+  return normalizedPath.replace(/\/+$/, "");
+}
+
+function invalidRelativePath(message: string): NormalizeWorkspaceRelativePathResult {
+  return {
+    success: false,
+    reasonCode: WORKSPACE_RELATIVE_PATH_ERROR_CODE,
+    message,
+  };
+}
+
 function pathMatchesDeniedPrefix(
-  relativePath: string,
+  normalizedRelativePath: string,
   deniedPathPrefixes: readonly string[],
 ): boolean {
-  const normalized = relativePath.replaceAll("\\", "/").replace(/^\.\//, "");
-  return deniedPathPrefixes.some((prefix) => normalized === prefix.replace(/\/$/, "") || normalized.startsWith(prefix));
+  return deniedPathPrefixes.some((prefix) => (
+    normalizedRelativePath === prefix || normalizedRelativePath.startsWith(`${prefix}/`)
+  ));
 }
 
 function includesAction<Action extends RunnerOperationAction>(
