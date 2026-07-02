@@ -1,54 +1,54 @@
-# Workspace Runner Design
+# Workspace Runner 設計
 
-This document summarizes the intended product and architecture direction for Asagao Workspace.
+このドキュメントは、Asagao Workspace のプロダクトとアーキテクチャの方向性をまとめたものです。
 
-Asagao Workspace should not become a generic GitHub operation wrapper. Its core role is to provide ChatGPT with a safe, isolated, inspectable development workspace that can apply multi-file changes, run commands, validate results, and export the resulting change set.
+Asagao Workspace は、汎用的な GitHub 操作ラッパーになるべきではありません。コアの役割は、ChatGPT に対して、安全で分離され、検査可能な開発 workspace を提供することです。その workspace では、複数ファイルにまたがる変更を適用し、コマンドを実行し、結果を検証し、最終的な change set を export できます。
 
-## Product position
+## プロダクト上の位置づけ
 
-Asagao Workspace is a ChatGPT App backed by an MCP server and an external Workspace Runner.
+Asagao Workspace は、MCP サーバーと外部 Workspace Runner に支えられた ChatGPT App です。
 
 ```text
 ChatGPT
-  -> reasoning, planning, review, patch authoring, repair decisions
+  -> reasoning、planning、review、patch authoring、repair decision
 
 ChatGPT App / MCP Server
-  -> tool contracts, authentication, workspace APIs, structured results, optional UI
+  -> tool contract、authentication、workspace API、structured result、任意の UI
 
 Workspace Runner
-  -> clone, patch application, file inspection, command execution, logs, artifacts, diff, snapshots
+  -> clone、patch application、file inspection、command execution、log、artifact、diff、snapshot
 
-Source host, for example GitHub
-  -> repository source of truth, branches, pull requests, CI, reviews
+Source host（例: GitHub）
+  -> repository source of truth、branch、pull request、CI、review
 ```
 
-The important boundary is that Asagao Workspace is a runner and change-set manager, not a replacement for a source host.
+重要な境界は、Asagao Workspace が runner と change-set manager であり、source host の代替ではないことです。
 
-## Goals
+## 目標
 
-- Let ChatGPT work with repositories that need real execution environments, such as Rust, Node.js, Python, or mixed-language projects.
-- Let ChatGPT apply and validate multi-file changes as a single change set instead of struggling with one-file-at-a-time upload flows.
-- Support patch, script, archive, and later change-set based workflows.
-- Run long commands asynchronously and return stable job identifiers.
-- Return structured command status, logs, diffs, artifacts, and safety metadata.
-- Keep the GitHub integration limited to what is required to materialize or export validated workspace changes.
-- Keep the design source-host agnostic so GitHub, GitLab, Bitbucket, zip export, and patch export can share the same internal model.
+- Rust、Node.js、Python、または複数言語が混在するプロジェクトのように、実行環境が必要なリポジトリで ChatGPT が作業できるようにする。
+- ChatGPT が 1 ファイルずつアップロードする flow に苦戦するのではなく、複数ファイルの変更を単一の change set として適用・検証できるようにする。
+- patch、script、archive、および将来的な change-set based workflow を支援する。
+- 長時間実行されるコマンドを非同期で実行し、安定した job identifier を返す。
+- コマンド状態、ログ、diff、artifact、安全性メタデータを structured data として返す。
+- GitHub integration は、検証済み workspace change を具体化または export するために必要な範囲に限定する。
+- 設計を source-host agnostic に保ち、GitHub、GitLab、Bitbucket、zip export、patch export が同じ internal model を共有できるようにする。
 
-## Non-goals
+## 非目標
 
-- Do not duplicate simple GitHub App or GitHub MCP operations such as listing issues, posting issue comments, reading pull request reviews, or browsing repositories.
-- Do not make GitHub the core domain model.
-- Do not expose arbitrary local PC control.
-- Do not expose broad filesystem or shell execution without a sandbox, policy model, and audit trail.
-- Do not make ChatGPT responsible for manually uploading individual repository files.
+- issue の一覧取得、issue comment の投稿、pull request review の読み取り、repository browsing のような単純な GitHub App / GitHub MCP 操作を重複実装しない。
+- GitHub を core domain model にしない。
+- 任意のローカル PC 操作を公開しない。
+- sandbox、policy model、audit trail がない状態で、広範な filesystem や shell execution を公開しない。
+- ChatGPT にリポジトリファイルを 1 つずつ手動アップロードさせる設計にしない。
 
-## Core domain model
+## コアドメインモデル
 
 ### Workspace
 
-A workspace is an isolated working copy plus runtime metadata.
+Workspace は、分離された working copy と runtime metadata です。
 
-Important fields:
+重要な field:
 
 ```ts
 interface Workspace {
@@ -68,7 +68,7 @@ interface Workspace {
 
 ### Change Set
 
-A change set is the main product concept. It represents a coherent set of workspace modifications and the evidence attached to them.
+Change Set は、このプロダクトの中心概念です。workspace に加えられた一貫した変更群と、それに紐づく証跡を表します。
 
 ```ts
 interface ChangeSet {
@@ -86,11 +86,11 @@ interface ChangeSet {
 }
 ```
 
-The change set should be usable without GitHub. It can later be exported as a patch, zip archive, git bundle, branch push, or pull request.
+Change Set は GitHub なしで利用できるべきです。将来的には patch、zip archive、git bundle、branch push、pull request として export できます。
 
 ### Command Job
 
-Long-running commands must be asynchronous.
+長時間実行されるコマンドは非同期である必要があります。
 
 ```ts
 interface CommandJob {
@@ -106,42 +106,42 @@ interface CommandJob {
 }
 ```
 
-Commands should be represented as argument arrays, not shell strings, unless a specific shell mode is intentionally added later.
+特定の shell mode を意図的に追加するまでは、command は shell string ではなく argument array として表現します。
 
 ## Tool boundary policy
 
-Asagao Workspace tools should be action-oriented and tied to workspace execution, validation, or export.
+Asagao Workspace の tool は、workspace execution、validation、export に結びついた action-oriented なものにします。
 
-### Keep out of scope when possible
+### 可能な限り scope 外に置くもの
 
-These are better handled by a dedicated GitHub App, GitHub MCP, or the source host UI:
+次の操作は、専用の GitHub App、GitHub MCP、または source host UI に任せる方が適切です。
 
-- list GitHub issues
-- list pull requests
-- post issue comments
-- read pull request review comments
-- edit pull request body
-- manage notifications
-- upload single files to GitHub one by one
+- GitHub issue の一覧取得
+- pull request の一覧取得
+- issue comment の投稿
+- pull request review comment の読み取り
+- pull request body の編集
+- notification の管理
+- GitHub へ単一ファイルを 1 つずつ upload する操作
 
-### Keep in scope
+### scope 内に置くもの
 
-These are central to Asagao Workspace:
+次の操作は Asagao Workspace の中心です。
 
-- create and delete isolated workspaces
-- clone a repository into a workspace
-- apply a patch, patch series, or archive into a workspace
-- inspect workspace file tree and selected files
-- run commands inside the workspace
-- poll command status and logs
-- snapshot and restore workspace state
-- produce workspace diff and diffstat
-- export patch, patch series, zip archive, or git bundle
-- prepare a commit-ready change set
+- 分離された workspace の作成と削除
+- repository を workspace に clone する
+- patch、patch series、archive を workspace に適用する
+- workspace の file tree と選択された file を調べる
+- workspace 内で command を実行する
+- command status と log を poll する
+- workspace state の snapshot と restore
+- workspace diff と diffstat の生成
+- patch、patch series、zip archive、git bundle の export
+- commit-ready な change set の準備
 
-GitHub push or pull request creation can be added later, but only as a destination for a validated change set, not as the core product model.
+GitHub push や pull request 作成は後から追加できます。ただし、それらは検証済み change set の destination であり、core product model ではありません。
 
-## Proposed MCP tools
+## 提案する MCP tool
 
 ### Workspace lifecycle
 
@@ -152,7 +152,7 @@ get_workspace
 delete_workspace
 ```
 
-`create_workspace` should accept optional repository information:
+`create_workspace` は任意の repository 情報を受け取れるようにします。
 
 ```ts
 interface CreateWorkspaceInput {
@@ -166,7 +166,7 @@ interface CreateWorkspaceInput {
 }
 ```
 
-The response should include `workspaceId`, status, base commit, working branch, and expiration metadata.
+response には `workspaceId`、status、base commit、working branch、expiration metadata を含めます。
 
 ### Workspace inspection
 
@@ -179,7 +179,7 @@ get_git_status
 get_workspace_diff
 ```
 
-`get_workspace_diff` is a first-class tool because ChatGPT needs to inspect the actual result of patches and command-driven modifications.
+ChatGPT は patch や command によって生じた実際の結果を確認する必要があるため、`get_workspace_diff` は第一級の tool とします。
 
 ### Patch and artifact input
 
@@ -190,16 +190,16 @@ upload_artifact
 apply_artifact
 ```
 
-MVP can start with `apply_patch`.
+MVP は `apply_patch` から始められます。
 
-Important response fields:
+重要な response field:
 
-- whether the patch applied
-- conflicts
+- patch が適用できたか
+- conflict
 - changed files
 - diffstat
 - resulting git status
-- diagnostics for failed hunks
+- failed hunk に対する diagnostic
 
 ### Command execution
 
@@ -210,7 +210,7 @@ get_command_logs
 cancel_command
 ```
 
-`run_command` should return a `jobId` immediately. Status and logs should be separate tools so long-running commands can be polled safely.
+`run_command` は即座に `jobId` を返します。長時間実行される command を安全に poll できるように、status と log は別 tool にします。
 
 ### Snapshot and rollback
 
@@ -221,7 +221,7 @@ restore_snapshot
 rollback_last_patch
 ```
 
-Snapshots are important because ChatGPT-generated patches can fail or make the repository worse before they get better.
+ChatGPT が生成した patch は、改善される前に失敗したり repository を悪化させたりする可能性があるため、snapshot は重要です。
 
 ### Export
 
@@ -233,11 +233,11 @@ export_git_bundle
 prepare_change_set
 ```
 
-The export tools should allow a user or another tool to take the validated work elsewhere.
+export tool により、ユーザーまたは別の tool は検証済みの作業結果を別の場所へ持ち出せます。
 
-## Recommended MVP
+## 推奨 MVP
 
-The first useful version should avoid broad GitHub automation and focus on the runner loop.
+最初に有用な version では、広範な GitHub automation を避け、runner loop に集中します。
 
 ```text
 create_workspace
@@ -258,42 +258,42 @@ export_patch
 export_workspace_archive
 ```
 
-This is enough to support the core loop:
+これだけで次の core loop を支援できます。
 
 ```text
-1. Create workspace from repository or empty template.
-2. ChatGPT produces a patch or script.
-3. Apply patch or artifact.
-4. Run validation command.
-5. Poll status and logs.
-6. Inspect diff and git status.
-7. Repair with another patch if needed.
-8. Export patch or archive.
+1. Repository または空 template から workspace を作成する。
+2. ChatGPT が patch または script を生成する。
+3. Patch または artifact を適用する。
+4. Validation command を実行する。
+5. Status と log を poll する。
+6. Diff と git status を確認する。
+7. 必要に応じて別の patch で修復する。
+8. Patch または archive を export する。
 ```
 
 ## Safety requirements
 
-Any file, command, repository, network, or artifact tool must be designed as a sandboxed operation.
+file、command、repository、network、artifact に関わる tool は、すべて sandboxed operation として設計する必要があります。
 
-Minimum requirements:
+最低要件:
 
 - workspace-level isolation
 - non-root execution
-- CPU, memory, disk, and timeout limits
+- CPU、memory、disk、timeout の制限
 - explicit internet policy
-- no default access to user secrets
-- explicit secret injection if secrets are ever supported
-- secret masking in logs
+- user secret への default access を持たないこと
+- secret を将来サポートする場合は explicit secret injection にすること
+- log 内の secret masking
 - path traversal protection
 - symlink handling policy
 - patch preflight validation
 - repository URL allow/deny policy
-- command policy and audit logging
-- workspace TTL and cleanup
-- artifact size limits
+- command policy と audit logging
+- workspace TTL と cleanup
+- artifact size limit
 - structured error reporting
 
-The default internet policy should not be full internet access. Recommended policy levels:
+default internet policy は full internet access にしないでください。推奨する policy level:
 
 ```text
 none
@@ -301,13 +301,13 @@ package_registry
 full
 ```
 
-`package_registry` should be considered for practical builds while still avoiding unrestricted network access.
+`package_registry` は、実用的な build を可能にしつつ unrestricted network access を避けるための選択肢として扱います。
 
 ## UI opportunities
 
-The MCP tools should be useful without UI, but a ChatGPT App iframe can improve review workflows.
+MCP tool は UI なしでも有用であるべきですが、ChatGPT App iframe により review workflow を改善できます。
 
-Useful UI panels:
+有用な UI panel:
 
 - workspace status
 - file tree
@@ -319,13 +319,13 @@ Useful UI panels:
 - conflict report
 - change-set summary
 
-The UI should consume structured tool results instead of becoming the source of truth.
+UI は source of truth になるのではなく、structured tool result を consume するべきです。
 
 ## GitHub integration policy
 
-GitHub integration should be minimal and change-set oriented.
+GitHub integration は最小限にし、change-set oriented にします。
 
-Allowed later additions:
+将来的に追加可能なもの:
 
 ```text
 clone_repository
@@ -336,65 +336,65 @@ commit_change_set
 push_change_set
 ```
 
-Potentially allowed after the change-set model is stable:
+change-set model が安定した後に追加を検討できるもの:
 
 ```text
 create_pull_request_from_change_set
 ```
 
-Avoid building simple GitHub wrappers that are already handled by existing GitHub tools.
+既存の GitHub tool がすでに扱える単純な GitHub wrapper は作らないようにします。
 
 ## Milestones
 
 ### Milestone 1: Local scaffold and contracts
 
-- Keep the existing MCP scaffold minimal.
-- Add domain-level models for workspace, command job, artifact, snapshot, and change set.
-- Add tool contract tests before implementing real execution.
+- 既存の MCP scaffold は最小構成のまま保つ。
+- workspace、command job、artifact、snapshot、change set の domain-level model を追加する。
+- 実際の execution を実装する前に tool contract test を追加する。
 
 ### Milestone 2: Safe local runner prototype
 
-- Implement workspace creation in a controlled local directory.
-- Implement patch application.
-- Implement asynchronous command jobs.
-- Implement status and log polling.
-- Add strict timeouts and cleanup.
+- 制御された local directory で workspace creation を実装する。
+- patch application を実装する。
+- asynchronous command job を実装する。
+- status と log polling を実装する。
+- strict timeout と cleanup を追加する。
 
 ### Milestone 3: Diff and export
 
-- Implement git status and workspace diff.
-- Implement patch export.
-- Implement zip archive export.
-- Add snapshot and restore.
+- git status と workspace diff を実装する。
+- patch export を実装する。
+- zip archive export を実装する。
+- snapshot と restore を追加する。
 
 ### Milestone 4: Repository source support
 
-- Add repository clone support.
-- Return base commit and branch metadata.
-- Add repository URL policy.
-- Add runtime profiles for Rust, Python, Node.js, and generic projects.
+- repository clone support を追加する。
+- base commit と branch metadata を返す。
+- repository URL policy を追加する。
+- Rust、Python、Node.js、generic project 向け runtime profile を追加する。
 
 ### Milestone 5: Change-set workflow
 
-- Implement `prepare_change_set`.
-- Attach command evidence and artifacts to change sets.
-- Generate commit message and pull request body suggestions.
-- Keep GitHub push and pull request creation optional.
+- `prepare_change_set` を実装する。
+- command evidence と artifact を change set に紐づける。
+- commit message と pull request body の候補を生成する。
+- GitHub push と pull request 作成は任意機能として保つ。
 
 ## Design summary
 
-Asagao Workspace should be designed as:
+Asagao Workspace は次のように設計します。
 
 ```text
-A safe development Workspace Runner for ChatGPT.
-It applies multi-file changes, runs validation commands, captures evidence,
-produces diffs and artifacts, and exports validated change sets.
+ChatGPT のための安全な開発用 Workspace Runner。
+複数ファイルの変更を適用し、validation command を実行し、証跡を記録し、
+diff と artifact を生成し、検証済み change set を export する。
 ```
 
-It should not be designed as:
+次のようには設計しません。
 
 ```text
-A general GitHub App clone or a collection of simple GitHub API wrappers.
+汎用 GitHub App clone、または単純な GitHub API wrapper の集合。
 ```
 
-The main product value is giving ChatGPT an execution and change-set layer that it currently lacks, while keeping source-host operations delegated to tools that already handle them well.
+主要なプロダクト価値は、ChatGPT に現在不足している実行レイヤーと change-set レイヤーを提供しつつ、source-host operation はそれを得意とする既存 tool に委譲することです。
