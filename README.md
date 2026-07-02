@@ -1,87 +1,87 @@
 # Asagao Workspace
 
-Asagao Workspace is a minimal scaffold for building a ChatGPT App with the OpenAI Apps SDK and a Model Context Protocol (MCP) server.
+Asagao Workspace は、OpenAI Apps SDK と Model Context Protocol（MCP）サーバーを使って ChatGPT App を作るための最小構成のひな形です。
 
-## What is included
+## 含まれているもの
 
-- A minimal Node.js MCP server exposed at `/mcp`.
-- A small iframe UI resource for ChatGPT Apps.
-- One read-only starter tool: `get_workspace_status`.
-- A layered source layout for future tools, authentication, persistence, and delivery concerns.
-- Local development scripts for running, validating, and testing the server.
-- MCP Inspector command for local tool testing.
-- GitHub Actions CI for syntax checks and tests.
-- `AGENTS.md` so Codex and other coding agents know how to work in this repository.
+- `/mcp` で公開される最小構成の Node.js MCP サーバー。
+- ChatGPT Apps 用の小さな iframe UI リソース。
+- 読み取り専用のスターターツール: `get_workspace_status`。
+- 将来のツール、認証、永続化、配信まわりの関心事に拡張しやすいレイヤー分けされたソース構成。
+- サーバーの起動、検証、テストを行うローカル開発用スクリプト。
+- ローカルでツールを確認するための MCP Inspector コマンド。
+- 構文チェックとテストを実行する GitHub Actions CI。
+- Codex などのコーディングエージェントがこのリポジトリで作業するための `AGENTS.md`。
 
-## Requirements
+## 必要要件
 
-- Node.js 22 or later
+- Node.js 22 以降
 - npm
 
-## Setup
+## セットアップ
 
 ```bash
 npm install
 ```
 
-## Run locally
+## ローカル実行
 
 ```bash
 npm run dev
 ```
 
-The server listens on:
+サーバーは次の URL で待ち受けます。
 
 ```text
 http://localhost:8787/mcp
 ```
 
-Health check:
+ヘルスチェック:
 
 ```bash
 curl http://localhost:8787/
 ```
 
-## Validate
+## 検証
 
 ```bash
 npm run verify
 ```
 
-This runs syntax checks and the Node.js test suite.
+このコマンドは構文チェックと Node.js のテストスイートを実行します。
 
-Individual commands:
+個別に実行する場合:
 
 ```bash
 npm run check
 npm test
 ```
 
-## Test with MCP Inspector
+## MCP Inspector でテストする
 
 ```bash
 npm run inspect
 ```
 
-This opens the MCP Inspector against `http://localhost:8787/mcp`.
+このコマンドは `http://localhost:8787/mcp` に対して MCP Inspector を開きます。
 
-## Connect from ChatGPT during development
+## 開発中に ChatGPT から接続する
 
-Expose the local server through an HTTPS tunnel, for example:
+ローカルサーバーを HTTPS トンネル経由で公開します。例:
 
 ```bash
 ngrok http 8787
 ```
 
-Then register the connector URL in ChatGPT as:
+その後、ChatGPT には次のコネクタ URL を登録します。
 
 ```text
 https://<your-tunnel-domain>/mcp
 ```
 
-## Architecture
+## アーキテクチャ
 
-The project intentionally separates the app into thin layers:
+このプロジェクトでは、アプリを意図的に薄いレイヤーへ分離しています。
 
 ```text
 .
@@ -92,49 +92,49 @@ The project intentionally separates the app into thin layers:
 ├── public/asagao-widget.html
 ├── scripts/check-syntax.js
 ├── src/
-│   ├── app/                 # MCP app composition
-│   ├── config/              # environment/config loading
-│   ├── http/                # HTTP + Streamable HTTP transport adapter
-│   ├── runtime/             # process startup boundary
-│   ├── tools/               # MCP tool registry and tool modules
-│   └── ui/                  # Apps SDK UI resource registration
+│   ├── app/                 # MCP アプリの組み立て
+│   ├── config/              # 環境変数・設定の読み込み
+│   ├── http/                # HTTP + Streamable HTTP transport アダプタ
+│   ├── runtime/             # プロセス起動境界
+│   ├── tools/               # MCP ツールレジストリと各ツールモジュール
+│   └── ui/                  # Apps SDK UI リソース登録
 ├── tests/
 ├── AGENTS.md
 ├── package.json
-├── server.js                # thin entrypoint
+├── server.js                # 薄いエントリポイント
 └── README.md
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) for the intended extension model.
+想定している拡張モデルについては [`docs/architecture.md`](docs/architecture.md) を参照してください。
 
-## Development policy
+## 開発ポリシー
 
-Do not work directly on `main`. Create a feature branch for every change.
+`main` で直接作業しないでください。変更ごとに feature branch を作成してください。
 
-Architecture foundation branch:
+アーキテクチャ基盤ブランチ:
 
 ```text
 feat/app-architecture-foundation
 ```
 
-Earlier minimal environment branch:
+以前の最小環境ブランチ:
 
 ```text
 feat/chatgpt-app-minimal-env
 ```
 
-## Adding a new tool
+## 新しいツールを追加する
 
-1. Create a new directory under `src/tools/<tool-name>/`.
-2. Put pure data/model logic in `model.js`.
-3. Put Apps SDK registration code in `register.js`.
-4. Add the registration function to `src/tools/index.js`.
-5. Add or update tests under `tests/`.
-6. Update this README and `docs/architecture.md` if the tool changes boundaries, safety assumptions, or runtime requirements.
+1. `src/tools/<tool-name>/` の下に新しいディレクトリを作成する。
+2. 純粋なデータ・モデルロジックを `model.js` に置く。
+3. Apps SDK の登録コードを `register.js` に置く。
+4. 登録関数を `src/tools/index.js` に追加する。
+5. `tests/` 配下にテストを追加または更新する。
+6. ツールが境界、安全性の前提、実行時要件を変える場合は、この README と `docs/architecture.md` を更新する。
 
-## Next steps
+## 次のステップ
 
-1. Replace the starter `get_workspace_status` tool with the first real Asagao Workspace capability.
-2. Decide whether the app needs authentication before exposing user-specific or write-capable tools.
-3. Add state persistence only after the tool model is stable.
-4. Add deployment configuration once the target hosting platform is selected.
+1. スターターの `get_workspace_status` ツールを、Asagao Workspace の最初の実用機能に置き換える。
+2. ユーザー固有または書き込み可能なツールを公開する前に、認証が必要かどうかを決める。
+3. ツールモデルが安定してから状態の永続化を追加する。
+4. 対象のホスティング基盤を選定してからデプロイ設定を追加する。
