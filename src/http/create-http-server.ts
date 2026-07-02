@@ -1,5 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  createAppContext,
+  type AppServices,
+} from "../app/create-app-context.ts";
 import { createAsagaoMcpServer } from "../app/create-asagao-mcp-server.ts";
 import { type AppConfig, loadConfig } from "../config/env.ts";
 import { isMcpRequest, isSupportedMcpMethod } from "./mcp-request.ts";
@@ -16,18 +20,23 @@ type McpServerLike = {
   close: () => Promise<void> | void;
 };
 
-type CreateMcpServer = (options: { config: AppConfig }) => McpServerLike;
+type CreateMcpServer = (options: {
+  config: AppConfig;
+  services: AppServices;
+}) => McpServerLike;
 
 type CreateHttpServerOptions = {
   config?: AppConfig;
   createMcpServer?: CreateMcpServer;
   logger?: Logger;
+  services?: AppServices;
 };
 
 export function createAsagaoHttpServer({
   config = loadConfig(),
   createMcpServer = createAsagaoMcpServer,
   logger = console,
+  services = createAppContext(),
 }: CreateHttpServerOptions = {}): Server {
   return createServer(async (req, res) => {
     if (!req.url) {
@@ -49,7 +58,7 @@ export function createAsagaoHttpServer({
 
     if (isMcpRequest(url.pathname, config.http.mcpPath) && isSupportedMcpMethod(req.method)) {
       setMcpCorsHeaders(res);
-      await handleMcpRequest({ req, res, config, createMcpServer, logger });
+      await handleMcpRequest({ req, res, config, createMcpServer, logger, services });
       return;
     }
 
@@ -63,14 +72,16 @@ async function handleMcpRequest({
   config,
   createMcpServer,
   logger,
+  services,
 }: {
   req: IncomingMessage;
   res: ServerResponse;
   config: AppConfig;
   createMcpServer: CreateMcpServer;
   logger: Logger;
+  services: AppServices;
 }): Promise<void> {
-  const server = createMcpServer({ config });
+  const server = createMcpServer({ config, services });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

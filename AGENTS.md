@@ -34,11 +34,13 @@ npm run inspect
 
 ## Architecture boundaries
 
-- `src/app/`: MCP app composition only. It wires resources and tools together.
+- `src/app/`: MCP app composition and shared app context wiring. It wires resources, tools, and process-local services together.
 - `src/config/`: environment and configuration loading.
 - `src/domain/`: Workspace Runner domain models, Zod schemas, and common tool response envelopes.
 - `src/http/`: HTTP server, CORS, request routing, and Streamable HTTP transport adapter.
 - `src/runtime/`: process startup and lifecycle boundary.
+- `src/services/`: application services such as Workspace registry state transitions.
+- `src/storage/`: storage boundaries such as process-local in-memory stores.
 - `src/tools/`: MCP tool modules. Each tool should keep pure model/data logic separate from Apps SDK registration.
 - `src/ui/`: Apps SDK UI resource registration.
 - `public/`: static UI assets served through Apps SDK resources.
@@ -69,7 +71,8 @@ npm run inspect
 - `src/app/create-asagao-mcp-server.ts` composes the MCP server.
 - `src/domain/` defines Workspace Runner domain models, Zod schemas, and common tool response envelopes.
 - `src/http/create-http-server.ts` owns HTTP routing and transport handling.
-- `src/tools/workspace-status/` defines the starter tool.
-- `src/tools/workspace-lifecycle/contracts.ts` defines the initial workspace lifecycle MCP tool contracts.
+- `src/tools/workspace-status/` defines the starter status tool.
+- `src/tools/workspace-lifecycle/` defines the in-memory workspace lifecycle MCP tool contracts, pure model, and Apps SDK registration.
+- `src/services/workspace-registry.ts` and `src/storage/in-memory-workspace-store.ts` provide process-local workspace lifecycle state.
 - `public/asagao-widget.html` defines the minimal ChatGPT iframe UI.
 - `.github/workflows/ci.yml` runs verification on pull requests and pushes.

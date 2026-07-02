@@ -70,6 +70,7 @@ test("list_workspaces input and output use the common response shape", () => {
     listWorkspacesInputSchema.safeParse({
       status: ["ready", "failed"],
       runtimeProfile: ["node", "generic"],
+      includeDeleted: true,
     }).success,
     true,
   );
