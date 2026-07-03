@@ -29,6 +29,7 @@ test("app context wires runner security services", () => {
       true,
     );
     assert.equal(context.workspaceGitService.constructor.name, "WorkspaceGitService");
+    assert.equal(context.workspacePatchService.constructor.name, "WorkspacePatchService");
     assert.equal(context.security.logMasker.maskText("plain"), "plain");
   } finally {
     rmSync(parent, { recursive: true, force: true });

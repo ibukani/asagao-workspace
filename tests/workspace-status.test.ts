@@ -34,5 +34,6 @@ test("buildWorkspaceStatus can expose the registered tool list", () => {
     "search_workspace",
     "get_git_status",
     "get_workspace_diff",
+    "apply_patch",
   ]);
 });

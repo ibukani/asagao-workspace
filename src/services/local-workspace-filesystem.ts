@@ -153,6 +153,10 @@ export class LocalWorkspaceFilesystem {
     return this.#paths.resolveWorkspaceDirectory(workspaceId);
   }
 
+  assertWorkspaceRelativePathInsideBoundary(workspaceId: string, relativePath: string): void {
+    this.#paths.resolveWorkspaceRelativePath(workspaceId, relativePath);
+  }
+
   deleteWorkspaceDirectory(workspaceId: string): void {
     try {
       const workspaceDirectory = this.#paths.resolveWorkspaceDirectory(workspaceId);

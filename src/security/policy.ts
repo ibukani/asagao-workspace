@@ -207,7 +207,7 @@ export const DEFAULT_GIT_OPERATION_POLICY = gitOperationPolicySchema.parse({
 }) satisfies GitOperationPolicy;
 
 export const DEFAULT_PATCH_OPERATION_POLICY = patchOperationPolicySchema.parse({
-  allowApply: false,
+  allowApply: true,
   allowRollback: false,
   requirePreflight: true,
   maxPatchBytes: 2_000_000,
@@ -550,9 +550,10 @@ function pathMatchesDeniedPrefix(
   normalizedRelativePath: string,
   deniedPathPrefixes: readonly string[],
 ): boolean {
-  return deniedPathPrefixes.some((prefix) => (
-    normalizedRelativePath === prefix || normalizedRelativePath.startsWith(`${prefix}/`)
-  ));
+  return deniedPathPrefixes.some((rawPrefix) => {
+    const prefix = stripTrailingSlashes(rawPrefix);
+    return normalizedRelativePath === prefix || normalizedRelativePath.startsWith(`${prefix}/`);
+  });
 }
 
 function includesAction<Action extends RunnerOperationAction>(

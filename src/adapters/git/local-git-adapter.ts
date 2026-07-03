@@ -14,6 +14,10 @@ import {
   type GetWorkspaceDiffSnapshotOptions,
   type GitAdapter,
   type GitDiffSnapshot,
+  type GitPatchApplySnapshot,
+  type GitPatchCheckSnapshot,
+  type GitPatchRequest,
+  type GitPatchTargetSnapshot,
   type GitRepositoryMetadata,
   type GitStatusSnapshot,
 } from "./git-adapter.ts";
@@ -69,6 +73,63 @@ export class LocalGitAdapter implements GitAdapter {
       changedFiles,
       diffstat,
       patch,
+    };
+  }
+
+
+  async inspectPatchTargets(
+    workspaceDirectory: string,
+    request: GitPatchRequest,
+  ): Promise<GitPatchTargetSnapshot> {
+    await this.#assertInsideWorkTree(workspaceDirectory);
+    const numstat = await this.#runGit(workspaceDirectory, ["apply", "--numstat", "-z"], {
+      maxStdoutBytes: SMALL_STDOUT_LIMIT_BYTES,
+      rejectOnFailure: true,
+      stdin: request.patch,
+    });
+
+    return {
+      targetFiles: parseGitNumstatZ(numstat.stdout),
+    };
+  }
+
+  async checkPatch(
+    workspaceDirectory: string,
+    request: GitPatchRequest,
+  ): Promise<GitPatchCheckSnapshot> {
+    await this.#assertInsideWorkTree(workspaceDirectory);
+    const [metadata, targets] = await Promise.all([
+      this.#readMetadata(workspaceDirectory),
+      this.inspectPatchTargets(workspaceDirectory, request),
+    ]);
+
+    await this.#runGit(workspaceDirectory, ["apply", "--check", "--binary"], {
+      maxStdoutBytes: SMALL_STDOUT_LIMIT_BYTES,
+      rejectOnFailure: true,
+      stdin: request.patch,
+    });
+
+    return {
+      ...metadata,
+      targetFiles: targets.targetFiles,
+    };
+  }
+
+  async applyPatch(
+    workspaceDirectory: string,
+    request: GitPatchRequest,
+  ): Promise<GitPatchApplySnapshot> {
+    const checked = await this.checkPatch(workspaceDirectory, request);
+    await this.#runGit(workspaceDirectory, ["apply", "--binary"], {
+      maxStdoutBytes: SMALL_STDOUT_LIMIT_BYTES,
+      rejectOnFailure: true,
+      stdin: request.patch,
+    });
+    const metadata = await this.#readMetadata(workspaceDirectory);
+
+    return {
+      ...metadata,
+      targetFiles: checked.targetFiles,
     };
   }
 
@@ -164,9 +225,11 @@ export class LocalGitAdapter implements GitAdapter {
     {
       maxStdoutBytes,
       rejectOnFailure,
+      stdin,
     }: {
       maxStdoutBytes: number;
       rejectOnFailure: boolean;
+      stdin?: string;
     },
   ): Promise<ProcessRunnerResult> {
     const result = await this.#processRunner.run({
@@ -176,6 +239,7 @@ export class LocalGitAdapter implements GitAdapter {
       timeoutMs: GIT_TIMEOUT_MS,
       maxStdoutBytes,
       maxStderrBytes: STDERR_LIMIT_BYTES,
+      ...(stdin === undefined ? {} : { stdin }),
     });
 
     if (result.failed && rejectOnFailure) {

@@ -169,7 +169,7 @@ interface CreateWorkspaceInput {
 }
 ```
 
-response には Workspace record を含めます。Issue #8 の段階では、Workspace は process-local な in-memory record として扱いつつ、設定された workspace root 配下に workspace ごとの filesystem directory を作成します。#23 Phase 1 では `get_workspace_lifecycle` が TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。repository clone、patch 適用、shell 実行、git reset / git clean の実処理はまだ行いません。削除時は対象 workspace directory だけを安全に削除してから、record を `deleted` status へ遷移させます。
+response には Workspace record を含めます。Issue #8 の段階では、Workspace は process-local な in-memory record として扱いつつ、設定された workspace root 配下に workspace ごとの filesystem directory を作成します。#23 Phase 1 では `get_workspace_lifecycle` が TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。repository clone、shell 実行、git reset / git clean の実処理はまだ行いません。patch 適用は `apply_patch` が担当します。削除時は対象 workspace directory だけを安全に削除してから、record を `deleted` status へ遷移させます。
 
 ### Workspace inspection
 
@@ -194,16 +194,17 @@ upload_artifact
 apply_artifact
 ```
 
-MVP は `apply_patch` から始められます。
+MVP は `apply_patch` から始めます。`apply_patch` は `git apply --numstat -z`、`git apply --check`、`git apply` の fixed-argument adapter 境界を使い、patch parser / applicator を自前再実装しません。`mode: "check"` は preflight のみ、`mode: "apply"` は preflight 成功後に適用します。
 
 重要な response field:
 
 - patch が適用できたか
-- conflict
-- changed files
+- preflight / apply の structured diagnostics
+- checked files と changed files
 - diffstat
 - resulting git status
-- failed hunk に対する diagnostic
+- expectedBaseCommit mismatch
+- unsafe path / denied prefix / symlink traversal の拒否理由
 
 ### Command execution
 
@@ -320,7 +321,7 @@ Workspace ごとの policy は次の関心事を分離します。
 - `secrets`: secret は標準では注入しない。`injectByDefault` は常に `false`。
 - `command`: command execution は既定で `deny_all`。明示的な allowlist がある場合のみ許可できる。
 - `file`: read/list/search は policy で明示され、write/delete は既定で拒否される。`relativePath` は `src/security/` 境界で POSIX 形式へ正規化され、絶対パス、drive prefix、NUL byte、`..` segment は fail-closed で拒否される。
-- `patch`: patch application は既定で拒否され、preflight を要求する。
+- `patch`: `apply_patch` は preflight 必須、path safety、audit 前提で許可する。patch series と rollback は後続 issue まで許可しない。
 - `artifact`: artifact create/read は許可可能だが、delete/export は既定で拒否される。
 - `lifecycle`: lifecycle inspection と Phase 1 の claim/reset/clean service boundary を policy と audit の対象にする。
 
@@ -398,7 +399,7 @@ create_pull_request_from_change_set
 ### Milestone 2: Safe local runner prototype
 
 - 制御された local directory で workspace creation を実装する。
-- patch application を実装する。
+- `apply_patch` を起点に patch application を実装する。
 - asynchronous command job を実装する。
 - status と log polling を実装する。
 - strict timeout と cleanup を追加する。
