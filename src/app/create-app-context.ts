@@ -10,6 +10,7 @@ import { WorkspaceInspectionService } from "../services/workspace-inspection-ser
 import { WorkspaceGitService } from "../services/workspace-git-service.ts";
 import { WorkspaceLifecycleService } from "../services/workspace-lifecycle-service.ts";
 import { WorkspacePatchService } from "../services/workspace-patch-service.ts";
+import { CommandJobService } from "../services/command-job-service.ts";
 import {
   WorkspaceRegistry,
   type Clock,
@@ -17,6 +18,7 @@ import {
 } from "../services/workspace-registry.ts";
 import { InMemoryWorkspaceStore } from "../storage/in-memory-workspace-store.ts";
 import { InMemoryWorkspaceLifecycleStore } from "../storage/in-memory-workspace-lifecycle-store.ts";
+import { InMemoryCommandJobStore } from "../storage/in-memory-command-job-store.ts";
 import {
   createRunnerSecurityServices,
   type RunnerSecurityServices,
@@ -31,10 +33,12 @@ export type AppServices = {
   workspaceFilesystem: LocalWorkspaceFilesystem;
   workspaceRegistry: WorkspaceRegistry;
   workspaceLifecycleStore: InMemoryWorkspaceLifecycleStore;
+  commandJobStore: InMemoryCommandJobStore;
   workspaceLifecycleService: WorkspaceLifecycleService;
   workspaceInspectionService: WorkspaceInspectionService;
   workspaceGitService: WorkspaceGitService;
   workspacePatchService: WorkspacePatchService;
+  commandJobService: CommandJobService;
   security: RunnerSecurityServices;
 };
 
@@ -54,6 +58,7 @@ export function createAppContext({
     workspaceRoot: config.workspace.rootPath,
   });
   const workspaceLifecycleStore = new InMemoryWorkspaceLifecycleStore();
+  const commandJobStore = new InMemoryCommandJobStore();
   const workspaceRegistry = new WorkspaceRegistry({
     store: workspaceStore,
     filesystem: workspaceFilesystem,
@@ -96,6 +101,17 @@ export function createAppContext({
     workspaceLifecycleService,
     ...(clock === undefined ? {} : { clock }),
   });
+  const commandJobService = new CommandJobService({
+    workspaceRegistry,
+    workspaceFilesystem,
+    security,
+    processRunner,
+    jobQueue,
+    jobStore: commandJobStore,
+    workspaceLifecycleService,
+    diagnosticsLogger,
+    ...(clock === undefined ? {} : { clock }),
+  });
 
   return Object.freeze({
     diagnosticsLogger,
@@ -106,10 +122,12 @@ export function createAppContext({
     workspaceFilesystem,
     workspaceRegistry,
     workspaceLifecycleStore,
+    commandJobStore,
     workspaceLifecycleService,
     workspaceInspectionService,
     workspaceGitService,
     workspacePatchService,
+    commandJobService,
     security,
   });
 }
