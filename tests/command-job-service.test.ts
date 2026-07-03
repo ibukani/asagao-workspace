@@ -10,7 +10,7 @@ import {
 } from "../src/security/index.ts";
 import { NoopDiagnosticsLogger } from "../src/adapters/logging/index.ts";
 import type { ProcessRunner, ProcessRunnerRequest, ProcessRunnerResult } from "../src/adapters/process/index.ts";
-import { PQueueJobQueue } from "../src/adapters/queue/index.ts";
+import { PQueueJobQueue, type JobQueue, type JobQueueRunOptions, type JobQueueStats } from "../src/adapters/queue/index.ts";
 import { CommandJobService } from "../src/services/command-job-service.ts";
 import { LocalWorkspaceFilesystem } from "../src/services/local-workspace-filesystem.ts";
 import { WorkspaceLifecycleService } from "../src/services/workspace-lifecycle-service.ts";
@@ -21,9 +21,11 @@ import { InMemoryWorkspaceStore } from "../src/storage/in-memory-workspace-store
 
 function createFixture({
   processRunner = new StaticProcessRunner(successResult()),
+  jobQueue = new PQueueJobQueue({ concurrency: 2, perWorkspaceConcurrency: 1 }),
   createJobId = sequenceId("job_service"),
 }: {
   processRunner?: ProcessRunner;
+  jobQueue?: JobQueue;
   createJobId?: () => string;
 } = {}) {
   const parent = mkdtempSync(join(tmpdir(), "asagao-command-service-"));
@@ -57,7 +59,7 @@ function createFixture({
     workspaceFilesystem: filesystem,
     security,
     processRunner,
-    jobQueue: new PQueueJobQueue({ concurrency: 2, perWorkspaceConcurrency: 1 }),
+    jobQueue,
     jobStore,
     workspaceLifecycleService: lifecycleService,
     diagnosticsLogger: new NoopDiagnosticsLogger(),
@@ -215,6 +217,75 @@ test("CommandJobService serializes commands for the same workspace", async () =>
   }
 });
 
+
+test("CommandJobService keeps lifecycle busy while queued jobs remain", async () => {
+  const manualQueue = new ManualJobQueue();
+  const fixture = createFixture({
+    jobQueue: manualQueue,
+    processRunner: new StaticProcessRunner(successResult()),
+    createJobId: sequenceId("job_service"),
+  });
+  try {
+    const workspace = fixture.registry.createWorkspace({});
+
+    const first = await fixture.service.runCommand({
+      workspaceId: workspace.workspaceId,
+      command: [process.execPath, "-e", "1"],
+      timeoutMs: 500,
+    });
+    const second = await fixture.service.runCommand({
+      workspaceId: workspace.workspaceId,
+      command: [process.execPath, "-e", "2"],
+      timeoutMs: 500,
+    });
+
+    assert.equal(fixture.jobStore.get(first.jobId)?.status, "queued");
+    assert.equal(fixture.jobStore.get(second.jobId)?.status, "queued");
+    assert.equal(fixture.lifecycleService.getWorkspaceLifecycle(workspace.workspaceId)?.lifecycle.busy, true);
+
+    await manualQueue.runNext();
+    await waitForJob(fixture.service, workspace.workspaceId, first.jobId, "succeeded");
+    assert.equal(fixture.jobStore.get(second.jobId)?.status, "queued");
+    assert.equal(fixture.lifecycleService.getWorkspaceLifecycle(workspace.workspaceId)?.lifecycle.busy, true);
+
+    await manualQueue.runNext();
+    await waitForJob(fixture.service, workspace.workspaceId, second.jobId, "succeeded");
+    assert.equal(fixture.lifecycleService.getWorkspaceLifecycle(workspace.workspaceId)?.lifecycle.busy, false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+
+test("CommandJobService audits queue failures", async () => {
+  const fixture = createFixture({
+    jobQueue: new RejectingJobQueue(new Error("queue offline")),
+    createJobId: () => "job_service001",
+  });
+  try {
+    const workspace = fixture.registry.createWorkspace({});
+
+    const queued = await fixture.service.runCommand({
+      workspaceId: workspace.workspaceId,
+      command: [process.execPath, "--version"],
+      timeoutMs: 500,
+    });
+    const failed = await waitForJob(fixture.service, workspace.workspaceId, queued.jobId, "failed");
+
+    assert.equal(failed.failureKind, "queue");
+    assert.match(failed.stderr, /queue offline/);
+    assert.equal(fixture.lifecycleService.getWorkspaceLifecycle(workspace.workspaceId)?.lifecycle.busy, false);
+    assert.equal(
+      fixture.auditRecorder.listEvents().some(
+        (event) => event.action === "run_command" && event.eventType === "operation_failed",
+      ),
+      true,
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("CommandJobService resolves workspace-relative cwd for process execution", async () => {
   const captureRunner = new CaptureProcessRunner(successResult());
   const fixture = createFixture({ processRunner: captureRunner, createJobId: () => "job_service001" });
@@ -235,6 +306,61 @@ test("CommandJobService resolves workspace-relative cwd for process execution", 
     fixture.cleanup();
   }
 });
+
+class ManualJobQueue implements JobQueue {
+  readonly #jobs: Array<{
+    job: () => Promise<unknown>;
+    resolve: (result: unknown) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+
+  add<Result>(job: () => Promise<Result>, _options: JobQueueRunOptions = {}): Promise<Result> {
+    return new Promise<Result>((resolve, reject) => {
+      this.#jobs.push({
+        job,
+        resolve: resolve as (result: unknown) => void,
+        reject,
+      });
+    });
+  }
+
+  async runNext(): Promise<void> {
+    const next = this.#jobs.shift();
+    if (next === undefined) {
+      throw new Error("No queued job to run.");
+    }
+
+    try {
+      next.resolve(await next.job());
+    } catch (error) {
+      next.reject(error);
+    }
+  }
+
+  stats(): JobQueueStats {
+    return {
+      pending: this.#jobs.length,
+      running: 0,
+      size: this.#jobs.length,
+    };
+  }
+}
+
+class RejectingJobQueue implements JobQueue {
+  readonly #error: Error;
+
+  constructor(error: Error) {
+    this.#error = error;
+  }
+
+  async add<Result>(_job: () => Promise<Result>, _options: JobQueueRunOptions = {}): Promise<Result> {
+    throw this.#error;
+  }
+
+  stats(): JobQueueStats {
+    return { pending: 0, running: 0, size: 0 };
+  }
+}
 
 class StaticProcessRunner implements ProcessRunner {
   readonly result: ProcessRunnerResult;

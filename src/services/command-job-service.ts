@@ -189,6 +189,7 @@ export class CommandJobService {
       timeoutMs,
     }, { now: this.#clock() }));
 
+    this.#workspaceLifecycleService?.markBusy(job.workspaceId);
     this.#diagnosticsLogger.info("Command job queued.", {
       jobId: job.jobId,
       workspaceId: job.workspaceId,
@@ -206,7 +207,14 @@ export class CommandJobService {
       }),
       { workspaceId: workspace.workspaceId },
     ).catch((error) => {
-      this.#handleQueueFailure(job.jobId, error);
+      void this.#handleQueueFailure(job.jobId, operation, error).catch((handlerError) => {
+        this.#diagnosticsLogger.error("Command job queue failure handler failed.", {
+          jobId: job.jobId,
+          workspaceId: job.workspaceId,
+          errorName: handlerError instanceof Error ? handlerError.name : "UnknownError",
+          errorMessage: handlerError instanceof Error ? handlerError.message : String(handlerError),
+        });
+      });
     });
 
     return job;
@@ -358,34 +366,58 @@ export class CommandJobService {
         errorMessage: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      if (this.#jobStore.list({ workspaceId: runningJob.workspaceId, status: ["running"] }).length === 0) {
-        this.#workspaceLifecycleService?.markIdle(runningJob.workspaceId);
-      }
+      this.#markWorkspaceIdleIfNoActiveJobs(runningJob.workspaceId);
     }
   }
 
-  #handleQueueFailure(jobId: string, error: unknown): void {
+  async #handleQueueFailure(
+    jobId: string,
+    operation: Parameters<typeof createAuditEvent>[0]["operation"],
+    error: unknown,
+  ): Promise<void> {
     const job = this.#jobStore.get(jobId);
     if (job === null || isTerminalStatus(job.status)) {
       return;
     }
 
+    const finishedAt = this.#clock();
+    const errorMessage = error instanceof Error ? error.message : String(error);
     const failedJob = this.#saveJob({
       ...job,
       status: "failed",
-      finishedAt: this.#clock().toISOString(),
-      updatedAt: this.#clock().toISOString(),
-      elapsedMs: elapsedMs(job.startedAt ?? job.createdAt, this.#clock()),
+      finishedAt: finishedAt.toISOString(),
+      updatedAt: finishedAt.toISOString(),
+      elapsedMs: elapsedMs(job.startedAt ?? job.createdAt, finishedAt),
       failureKind: "queue",
-      stderr: error instanceof Error ? error.message : String(error),
-      stderrBytes: Buffer.byteLength(error instanceof Error ? error.message : String(error), "utf8"),
+      stderr: errorMessage,
+      stderrBytes: Buffer.byteLength(errorMessage, "utf8"),
     });
-
-    this.#diagnosticsLogger.error("Command job queue failed.", {
+    const metadata = {
       ...commandJobAuditMetadata(failedJob),
       errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage,
+    };
+
+    await this.#recordAudit({
+      operation,
+      eventType: "operation_failed",
+      decision: { outcome: "allowed", message: "Command job queue failed." },
+      message: "Command job queue failed.",
+      metadata,
     });
-    this.#workspaceLifecycleService?.markIdle(failedJob.workspaceId);
+    this.#diagnosticsLogger.error("Command job queue failed.", metadata);
+    this.#markWorkspaceIdleIfNoActiveJobs(failedJob.workspaceId);
+  }
+
+  #markWorkspaceIdleIfNoActiveJobs(workspaceId: string): void {
+    const activeJobs = this.#jobStore.list({
+      workspaceId,
+      status: ["queued", "running"],
+    });
+
+    if (activeJobs.length === 0) {
+      this.#workspaceLifecycleService?.markIdle(workspaceId);
+    }
   }
 
   #saveTerminalJob(runningJob: CommandJob, result: ProcessRunnerResult): CommandJob {
