@@ -6,6 +6,11 @@ import {
   type WorkspaceReadFileData,
   type WorkspaceSearchData,
 } from "../domain/index.ts";
+import { AdapterError } from "../adapters/errors.ts";
+import {
+  LocalWorkspaceTraversal,
+  type WorkspaceTraversal,
+} from "../adapters/files/index.ts";
 import { WorkspacePathBoundaryError } from "../filesystem/workspace-paths.ts";
 import { runAuditedOperation, RunnerOperationDeniedError } from "../security/audit.ts";
 import { evaluateWorkspaceOperationPolicy, normalizeWorkspaceRelativePath, type SecurityActor } from "../security/policy.ts";
@@ -74,6 +79,7 @@ export type WorkspaceInspectionServiceOptions = {
   workspaceRegistry: WorkspaceRegistry;
   workspaceFilesystem: LocalWorkspaceFilesystem;
   security: RunnerSecurityServices;
+  traversal?: WorkspaceTraversal;
   clock?: Clock;
 };
 
@@ -109,17 +115,20 @@ export class WorkspaceInspectionService {
   readonly #workspaceRegistry: WorkspaceRegistry;
   readonly #workspaceFilesystem: LocalWorkspaceFilesystem;
   readonly #security: RunnerSecurityServices;
+  readonly #traversal: WorkspaceTraversal;
   readonly #clock: Clock;
 
   constructor({
     workspaceRegistry,
     workspaceFilesystem,
     security,
+    traversal = new LocalWorkspaceTraversal(),
     clock = () => new Date(),
   }: WorkspaceInspectionServiceOptions) {
     this.#workspaceRegistry = workspaceRegistry;
     this.#workspaceFilesystem = workspaceFilesystem;
     this.#security = security;
+    this.#traversal = traversal;
     this.#clock = clock;
   }
 
@@ -149,24 +158,15 @@ export class WorkspaceInspectionService {
         maxEntries,
         includeFiles: input.includeFiles ?? true,
       },
-      execute: () => {
-        const tree = this.#workspaceFilesystem.listWorkspaceFileTree({
-          workspaceId: workspace.workspaceId,
-          rootPath,
-          maxDepth,
-          maxEntries,
-          deniedPathPrefixes: policy.file.deniedPathPrefixes,
-        });
-
-        if (input.includeFiles === false) {
-          return {
-            ...tree,
-            entries: tree.entries.filter((entry) => entry.type !== "file"),
-          };
-        }
-
-        return tree;
-      },
+      execute: () => this.#traversal.listFileTree({
+        workspaceId: workspace.workspaceId,
+        workspaceDirectory: this.#workspaceFilesystem.resolveWorkspaceDirectoryForOperation(workspace.workspaceId),
+        rootPath,
+        maxDepth,
+        maxEntries,
+        includeFiles: input.includeFiles ?? true,
+        deniedPathPrefixes: policy.file.deniedPathPrefixes,
+      }),
     });
   }
 
@@ -246,8 +246,9 @@ export class WorkspaceInspectionService {
         maxResults,
         maxFileBytes,
       },
-      execute: () => this.#workspaceFilesystem.searchWorkspaceText({
+      execute: () => this.#traversal.searchText({
         workspaceId: workspace.workspaceId,
+        workspaceDirectory: this.#workspaceFilesystem.resolveWorkspaceDirectoryForOperation(workspace.workspaceId),
         rootPath,
         query: input.query,
         caseSensitive,
@@ -293,7 +294,7 @@ export class WorkspaceInspectionService {
     rootOrRelativePath: string;
     actor: SecurityActor;
     metadata: Record<string, unknown>;
-    execute: () => Result;
+    execute: () => Result | Promise<Result>;
   }): Promise<Result> {
     const policy = this.#security.createWorkspacePolicy(workspace);
     const operation = {
@@ -369,6 +370,18 @@ function toWorkspaceInspectionServiceError(
     return mapFilesystemError(error, workspaceId);
   }
 
+  if (error instanceof WorkspacePathBoundaryError) {
+    return new WorkspaceInspectionServiceError(
+      WORKSPACE_INSPECTION_ERROR_CODES.pathDenied,
+      error.message,
+      { workspaceId, reasonCode: error.code },
+    );
+  }
+
+  if (error instanceof AdapterError) {
+    return mapAdapterError(error, workspaceId);
+  }
+
   return new WorkspaceInspectionServiceError(
     WORKSPACE_INSPECTION_ERROR_CODES.filesystemUnavailable,
     "Workspace filesystem operation failed.",
@@ -388,6 +401,34 @@ function findWorkspacePathBoundaryError(error: unknown): WorkspacePathBoundaryEr
   }
 
   return null;
+}
+
+function mapAdapterError(
+  error: AdapterError,
+  workspaceId: string,
+): WorkspaceInspectionServiceError {
+  const reason = typeof error.details.reason === "string" ? error.details.reason : null;
+  if (reason === "path_not_found") {
+    return new WorkspaceInspectionServiceError(
+      WORKSPACE_INSPECTION_ERROR_CODES.fileNotFound,
+      "Workspace path not found.",
+      { workspaceId, ...error.toSafeDetails() },
+    );
+  }
+
+  if (reason === "not_directory") {
+    return new WorkspaceInspectionServiceError(
+      WORKSPACE_INSPECTION_ERROR_CODES.notADirectory,
+      "Workspace path is not a directory.",
+      { workspaceId, ...error.toSafeDetails() },
+    );
+  }
+
+  return new WorkspaceInspectionServiceError(
+    WORKSPACE_INSPECTION_ERROR_CODES.filesystemUnavailable,
+    "Workspace traversal operation failed.",
+    { workspaceId, ...error.toSafeDetails() },
+  );
 }
 
 function mapFilesystemError(

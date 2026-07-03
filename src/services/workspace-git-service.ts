@@ -5,15 +5,16 @@ import {
   type WorkspaceDiffData,
   type WorkspaceGitStatusData,
 } from "../domain/index.ts";
+import {
+  GIT_ADAPTER_ERROR_CODES,
+  GitAdapterError,
+  LocalGitAdapter,
+  type GitAdapter,
+} from "../adapters/git/index.ts";
 import { runAuditedOperation, RunnerOperationDeniedError } from "../security/audit.ts";
 import { evaluateWorkspaceOperationPolicy, type SecurityActor } from "../security/policy.ts";
 import type { RunnerSecurityServices } from "../security/services.ts";
 import { LocalWorkspaceFilesystem } from "./local-workspace-filesystem.ts";
-import {
-  LOCAL_GIT_REPOSITORY_ERROR_CODES,
-  LocalGitRepository,
-  LocalGitRepositoryError,
-} from "./local-git-repository.ts";
 import { type Clock, type WorkspaceRegistry } from "./workspace-registry.ts";
 
 export const WORKSPACE_GIT_DEFAULT_LIMITS = {
@@ -60,7 +61,7 @@ export type WorkspaceGitServiceOptions = {
   workspaceRegistry: WorkspaceRegistry;
   workspaceFilesystem: LocalWorkspaceFilesystem;
   security: RunnerSecurityServices;
-  gitRepository?: LocalGitRepository;
+  gitAdapter?: GitAdapter;
   clock?: Clock;
 };
 
@@ -82,20 +83,20 @@ export class WorkspaceGitService {
   readonly #workspaceRegistry: WorkspaceRegistry;
   readonly #workspaceFilesystem: LocalWorkspaceFilesystem;
   readonly #security: RunnerSecurityServices;
-  readonly #gitRepository: LocalGitRepository;
+  readonly #gitAdapter: GitAdapter;
   readonly #clock: Clock;
 
   constructor({
     workspaceRegistry,
     workspaceFilesystem,
     security,
-    gitRepository = new LocalGitRepository(),
+    gitAdapter = new LocalGitAdapter(),
     clock = () => new Date(),
   }: WorkspaceGitServiceOptions) {
     this.#workspaceRegistry = workspaceRegistry;
     this.#workspaceFilesystem = workspaceFilesystem;
     this.#security = security;
-    this.#gitRepository = gitRepository;
+    this.#gitAdapter = gitAdapter;
     this.#clock = clock;
   }
 
@@ -112,7 +113,7 @@ export class WorkspaceGitService {
       action: "get_git_status",
       actor: input.actor ?? "assistant",
       metadata: { maxFiles },
-      execute: () => this.#gitRepository.getStatus(
+      execute: () => this.#gitAdapter.getStatus(
         this.#workspaceFilesystem.resolveWorkspaceDirectoryForOperation(workspace.workspaceId),
       ),
     });
@@ -151,7 +152,7 @@ export class WorkspaceGitService {
       action: "get_workspace_diff",
       actor: input.actor ?? "assistant",
       metadata: { maxFiles, maxPatchBytes, includePatch },
-      execute: () => this.#gitRepository.getDiff(
+      execute: () => this.#gitAdapter.getDiff(
         this.#workspaceFilesystem.resolveWorkspaceDirectoryForOperation(workspace.workspaceId),
         { includePatch, maxPatchBytes },
       ),
@@ -266,21 +267,21 @@ function toWorkspaceGitServiceError(
     );
   }
 
-  if (error instanceof LocalGitRepositoryError) {
+  if (error instanceof GitAdapterError) {
     switch (error.code) {
-      case LOCAL_GIT_REPOSITORY_ERROR_CODES.gitUnavailable:
+      case GIT_ADAPTER_ERROR_CODES.gitUnavailable:
         return new WorkspaceGitServiceError(
           WORKSPACE_GIT_ERROR_CODES.gitUnavailable,
           "Git executable is unavailable.",
           { workspaceId },
         );
-      case LOCAL_GIT_REPOSITORY_ERROR_CODES.notGitWorkspace:
+      case GIT_ADAPTER_ERROR_CODES.notGitWorkspace:
         return new WorkspaceGitServiceError(
           WORKSPACE_GIT_ERROR_CODES.notGitWorkspace,
           "Workspace directory is not a git work tree.",
           { workspaceId },
         );
-      case LOCAL_GIT_REPOSITORY_ERROR_CODES.gitCommandFailed:
+      case GIT_ADAPTER_ERROR_CODES.gitCommandFailed:
         return new WorkspaceGitServiceError(
           action === "get_git_status"
             ? WORKSPACE_GIT_ERROR_CODES.gitStatusFailed
@@ -290,9 +291,7 @@ function toWorkspaceGitServiceError(
             : "Workspace diff inspection failed.",
           {
             workspaceId,
-            command: error.command,
-            exitCode: error.exitCode,
-            stderr: error.stderr,
+            ...error.toSafeDetails(),
           },
         );
     }

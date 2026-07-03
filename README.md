@@ -200,16 +200,16 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 
 Runner の低レベル処理は、必要に応じて外部ライブラリを使います。ただし、ライブラリは Asagao Workspace の security boundary、audit event、Workspace lifecycle、Change Set model、MCP tool contract を置き換えません。
 
-MVP で導入する候補は次の通りです。実際の dependency 追加と adapter 実装は #36 で扱います。
+Issue #36 で MVP dependency と adapter 境界を導入済みです。採用した dependency と主な閉じ込め先は次の通りです。
 
-- command execution: `execa`
-- job queue / concurrency control: `p-queue`
-- file traversal: `fast-glob`
-- `.gitignore` compatible filtering: `ignore`
-- archive generation: `yazl`
-- runtime diagnostics logging: `pino`
+- command execution: `execa` → `src/adapters/process/ProcessRunner`
+- job queue / concurrency control: `p-queue` → `src/adapters/queue/JobQueue`
+- file traversal: `fast-glob` → `src/adapters/files/WorkspaceTraversal`
+- `.gitignore` compatible filtering: `ignore` → `src/adapters/files/WorkspaceIgnoreFilter`
+- archive generation: `yazl` → `src/adapters/archive/ArchiveWriter`
+- runtime diagnostics logging: `pino` → `src/adapters/logging/DiagnosticsLogger`
 
-導入を強く検討する候補は、`simple-git`、`istextorbinary`、`file-type`、Node.js `util.stripVTControlCharacters` / `strip-ansi`、`diff` / jsdiff です。`proper-lockfile` と `lru-cache` は将来検討、`shelljs`、`rimraf`、`fs-extra` は原則非採用または慎重に扱います。
+`simple-git`、`istextorbinary`、`file-type`、`strip-ansi` は Issue #36 では追加していません。git 操作は `execa` 経由の fixed-argument `git` CLI adapter に寄せ、command log normalization は Node.js 標準の `util.stripVTControlCharacters` を使います。`proper-lockfile` と `lru-cache` は将来検討、`shelljs`、`rimraf`、`fs-extra` は原則非採用または慎重に扱います。
 
 外部ライブラリは tool handler から直接呼ばず、`src/adapters/` または service 境界に閉じ込めます。filesystem、command、git、artifact、lifecycle 操作は policy と audit event を通し、runtime diagnostics logger と audit event model は分離します。
 

@@ -123,6 +123,9 @@ test("workspace git model reports invalid input and non-git workspaces as failur
     assert.equal(nonGit.ok, false);
     assert.equal(nonGit.error.code, "not_git_workspace");
     assert.equal(getWorkspaceDiffOutputSchema.safeParse(nonGit).success, true);
+    const serialized = JSON.stringify(nonGit);
+    assert.equal(serialized.includes(fixture.workspaceDirectory), false);
+    assert.doesNotMatch(serialized, /GitAdapterError|AdapterError|ExecaError|execa/i);
   } finally {
     rmSync(fixture.parent, { recursive: true, force: true });
   }

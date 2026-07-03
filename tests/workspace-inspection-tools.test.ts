@@ -112,6 +112,11 @@ test("workspace inspection model reports invalid input and missing workspaces as
       workspaceId: "wks_missing001",
       query: "needle",
     });
+    const missingRoot = await buildSearchWorkspaceResult(fixture.service, {
+      workspaceId: fixture.workspace.workspaceId,
+      query: "needle",
+      rootPath: "missing",
+    });
 
     assert.equal(invalid.ok, false);
     assert.equal(invalid.error.code, "invalid_input");
@@ -120,6 +125,13 @@ test("workspace inspection model reports invalid input and missing workspaces as
     assert.equal(missing.ok, false);
     assert.equal(missing.error.code, "workspace_not_found");
     assert.equal(searchWorkspaceOutputSchema.safeParse(missing).success, true);
+
+    assert.equal(missingRoot.ok, false);
+    assert.equal(missingRoot.error.code, "file_not_found");
+    assert.equal(searchWorkspaceOutputSchema.safeParse(missingRoot).success, true);
+    const serialized = JSON.stringify(missingRoot);
+    assert.equal(serialized.includes(fixture.workspaceDirectory), false);
+    assert.doesNotMatch(serialized, /LocalWorkspaceTraversal|AdapterError|fast-glob|FastGlob/i);
   } finally {
     rmSync(fixture.parent, { recursive: true, force: true });
   }
