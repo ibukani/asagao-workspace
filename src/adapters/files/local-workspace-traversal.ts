@@ -100,7 +100,7 @@ export class LocalWorkspaceTraversal implements WorkspaceTraversal {
         operation: "workspace_traversal.list_file_tree",
         code: ADAPTER_ERROR_CODES.traversalFailed,
         message: "Workspace file traversal failed.",
-        details: { workspaceId, rootPath, message: error instanceof Error ? error.message : String(error) },
+        details: { workspaceId, rootPath, reason: "unexpected_traversal_error" },
         cause: error,
       });
     }
@@ -217,7 +217,7 @@ export class LocalWorkspaceTraversal implements WorkspaceTraversal {
         operation: "workspace_traversal.search_text",
         code: ADAPTER_ERROR_CODES.traversalFailed,
         message: "Workspace text search failed.",
-        details: { workspaceId, rootPath, message: error instanceof Error ? error.message : String(error) },
+        details: { workspaceId, rootPath, reason: "unexpected_search_error" },
         cause: error,
       });
     }
