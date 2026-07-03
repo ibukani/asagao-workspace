@@ -10,6 +10,7 @@ Asagao Workspace は、OpenAI Apps SDK と Model Context Protocol（MCP）サー
 - Workspace lifecycle ツール: `create_workspace`、`list_workspaces`、`get_workspace`、`delete_workspace`、`get_workspace_lifecycle`。
 - Workspace inspection ツール: `get_file_tree`、`read_file`、`search_workspace`。
 - Workspace git inspection ツール: `get_git_status`、`get_workspace_diff`。
+- Workspace patch ツール: `apply_patch`。
 - Runner library policy と ADR: 低レベル処理を外部ライブラリに寄せつつ、adapter / security / audit 境界を維持する方針。
 - Workspace Runner の中核となる domain model: Workspace、Command Job、Artifact、Snapshot、Change Set。
 - Workspace lifecycle 系ツールの contract schema、handler model、local workspace directory 管理、TTL / dirty / busy / reusable 判定境界。
@@ -163,7 +164,7 @@ ASAGAO_WORKSPACE_ROOT=.asagao/workspaces
 
 Workspace path の解決は `workspaceId + relativePath` の形に閉じ、root 外・workspace 外へ出る path traversal と、root 外へ抜ける symlink traversal を拒否します。ChatGPT-facing な tool output にはホスト側の絶対パスを露出しません。
 
-repository clone、patch 適用、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。
+repository clone、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。patch 適用は `apply_patch` が git workspace 向けに担当します。
 
 ## Workspace inspection tools
 
@@ -196,6 +197,16 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 
 `get_workspace_diff` は changed files、diffstat、必要に応じて patch 本文を返します。patch 本文は `maxPatchBytes` と git policy の `maxPatchBytes` で上限化され、巨大 diff でも result envelope が壊れないよう `patch.truncated` と `patch.omittedReason` を返します。deleted file は deleted status と通常の git patch、binary file は `binary: true` として扱い、untracked text file は new file patch を生成します。
 
+## Workspace patch tools
+
+`src/tools/workspace-patch/` には、ChatGPT が生成した unified git patch を workspace に適用する tool contract と handler model を定義しています。
+
+- `apply_patch`
+
+`apply_patch` は `workspaceId`、`patch`、任意の `expectedBaseCommit`、`mode` を受け取ります。`mode: "check"` では `git apply --check` semantics による preflight のみを行い、`mode: "apply"` では preflight 成功後に `git apply` を実行します。patch 本文は `ProcessRunner` の stdin 経由で渡し、shell string として実行しません。
+
+patch 操作は `WorkspacePatchService` を通り、patch policy、audit event、workspace-relative path 正規化、denied prefix、workspace 外へ抜ける symlink traversal の検査を行います。成功時は changed files、diffstat、resulting git status、diagnostics を返し、lifecycle dirty marker を更新します。壊れた patch、base commit mismatch、unsafe path、patch size 超過は適用前に structured diagnostics として返します。patch 適用前 snapshot の作成は #13 に委譲し、現時点では `snapshotCreated: false` と `snapshotPolicy: "deferred_to_issue_13"` を返します。
+
 ## Runner library policy
 
 Runner の低レベル処理は、必要に応じて外部ライブラリを使います。ただし、ライブラリは Asagao Workspace の security boundary、audit event、Workspace lifecycle、Change Set model、MCP tool contract を置き換えません。
@@ -221,10 +232,10 @@ Issue #36 で MVP dependency と adapter 境界を導入済みです。採用し
 - `none`、`package_registry`、`full` の internet policy。既定値は `none`。
 - command allowlist / denylist policy。既定値は `deny_all`。
 - secret を標準では注入しない policy。
-- git status / diff inspection と lifecycle claim/reset/clean 操作を含む audit event の共通形式と recorder interface。
+- git status / diff inspection、patch apply、lifecycle claim/reset/clean 操作を含む audit event の共通形式と recorder interface。
 - audit metadata や command log に適用できる log masking extension point。
 
-repository clone、patch 適用、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。これらを追加する場合は、実際の副作用を起こす前に `src/security/` の policy を参照し、audit event を記録する必要があります。
+repository clone、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。patch 適用は `apply_patch` が git workspace 向けに担当します。これらを追加する場合は、実際の副作用を起こす前に `src/security/` の policy を参照し、audit event を記録する必要があります。
 
 
 ## 新しいツールを追加する
@@ -238,9 +249,9 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 
 ## 次のステップ
 
-1. #36 で Runner 共通 dependency と adapter 境界を整備する。
-2. #10 / #19 の既存実装を library-aware policy と照合し、必要なら adapter 化する。
-3. apply_patch tool を追加し、`git apply --check` / `git apply` semantics を `GitAdapter` 経由で利用する。
-4. command job 基盤を追加し、`ProcessRunner` / `JobQueue` と busy marker を接続する。
-5. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。
+1. command job 基盤を追加し、`ProcessRunner` / `JobQueue` と busy marker を接続する。
+2. command log cursor と cancel semantics を実装する。
+3. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。
+4. #13 snapshot / restore と `apply_patch` の rollback story を接続する。
+5. #14 export_patch / archive と #16 prepare_change_set を実装する。
 6. 対象のホスティング基盤を選定してからデプロイ設定を追加する。

@@ -9,6 +9,7 @@ import { LocalWorkspaceFilesystem } from "../services/local-workspace-filesystem
 import { WorkspaceInspectionService } from "../services/workspace-inspection-service.ts";
 import { WorkspaceGitService } from "../services/workspace-git-service.ts";
 import { WorkspaceLifecycleService } from "../services/workspace-lifecycle-service.ts";
+import { WorkspacePatchService } from "../services/workspace-patch-service.ts";
 import {
   WorkspaceRegistry,
   type Clock,
@@ -33,6 +34,7 @@ export type AppServices = {
   workspaceLifecycleService: WorkspaceLifecycleService;
   workspaceInspectionService: WorkspaceInspectionService;
   workspaceGitService: WorkspaceGitService;
+  workspacePatchService: WorkspacePatchService;
   security: RunnerSecurityServices;
 };
 
@@ -86,6 +88,14 @@ export function createAppContext({
     gitAdapter,
     ...(clock === undefined ? {} : { clock }),
   });
+  const workspacePatchService = new WorkspacePatchService({
+    workspaceRegistry,
+    workspaceFilesystem,
+    security,
+    gitAdapter,
+    workspaceLifecycleService,
+    ...(clock === undefined ? {} : { clock }),
+  });
 
   return Object.freeze({
     diagnosticsLogger,
@@ -99,6 +109,7 @@ export function createAppContext({
     workspaceLifecycleService,
     workspaceInspectionService,
     workspaceGitService,
+    workspacePatchService,
     security,
   });
 }

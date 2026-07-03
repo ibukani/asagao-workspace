@@ -7,3 +7,4 @@ export * from "./workspace-lifecycle.ts";
 export * from "./workspace.ts";
 export * from "./workspace-inspection.ts";
 export * from "./workspace-git.ts";
+export * from "./workspace-patch.ts";

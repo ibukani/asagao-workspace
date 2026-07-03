@@ -58,10 +58,41 @@ export type GetWorkspaceDiffSnapshotOptions = {
   maxPatchBytes: number;
 };
 
+export type GitPatchTarget = {
+  path: string;
+  additions?: number;
+  deletions?: number;
+  binary: boolean;
+};
+
+export type GitPatchTargetSnapshot = {
+  targetFiles: GitPatchTarget[];
+};
+
+export type GitPatchCheckSnapshot = GitPatchTargetSnapshot & GitRepositoryMetadata;
+
+export type GitPatchApplySnapshot = GitPatchTargetSnapshot & GitRepositoryMetadata;
+
+export type GitPatchRequest = {
+  patch: string;
+};
+
 export type GitAdapter = {
   getStatus: (workspaceDirectory: string) => Promise<GitStatusSnapshot>;
   getDiff: (
     workspaceDirectory: string,
     options: GetWorkspaceDiffSnapshotOptions,
   ) => Promise<GitDiffSnapshot>;
+  inspectPatchTargets: (
+    workspaceDirectory: string,
+    request: GitPatchRequest,
+  ) => Promise<GitPatchTargetSnapshot>;
+  checkPatch: (
+    workspaceDirectory: string,
+    request: GitPatchRequest,
+  ) => Promise<GitPatchCheckSnapshot>;
+  applyPatch: (
+    workspaceDirectory: string,
+    request: GitPatchRequest,
+  ) => Promise<GitPatchApplySnapshot>;
 };

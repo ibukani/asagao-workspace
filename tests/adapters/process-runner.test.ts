@@ -82,3 +82,17 @@ test("ExecaProcessRunner reports spawn failures without throwing library errors"
   assert.equal(result.failureKind, "spawn");
   assert.equal(result.exitCode, null);
 });
+
+test("ExecaProcessRunner can pipe bounded stdin without exposing stdin in results", async () => {
+  const result = await runner.run({
+    executable: process.execPath,
+    args: ["-e", "process.stdin.pipe(process.stdout)"],
+    stdin: "from stdin",
+    maxStdoutBytes: 100,
+  });
+
+  assert.equal(result.failed, false);
+  assert.equal(result.stdout, "from stdin");
+  assert.equal(JSON.stringify(result).includes("from stdin"), true);
+  assert.equal(result.command.includes("from stdin"), false);
+});

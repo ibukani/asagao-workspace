@@ -19,6 +19,7 @@ export type ProcessRunnerRequest = {
   cancelSignal?: AbortSignal;
   maxStdoutBytes?: number;
   maxStderrBytes?: number;
+  stdin?: string;
 };
 
 export type ProcessRunnerResult = {

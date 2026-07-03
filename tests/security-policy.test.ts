@@ -33,7 +33,7 @@ test("workspace security policy defaults to explicit default-deny behavior", () 
   assert.equal(policy.git.allowStatus, true);
   assert.equal(policy.git.allowDiff, true);
   assert.equal(policy.git.maxPatchBytes, 2_000_000);
-  assert.equal(policy.patch.allowApply, false);
+  assert.equal(policy.patch.allowApply, true);
   assert.equal(policy.artifact.allowExport, false);
   assert.equal(policy.lifecycle.allowGet, true);
   assert.equal(policy.lifecycle.allowClaim, true);
@@ -172,8 +172,8 @@ test("workspace operation policy covers file, git, patch, command, artifact, and
       operationKind: "patch",
       action: "apply_patch",
       actor: "assistant",
-    })).reasonCode,
-    "patch_apply_denied",
+    })).outcome,
+    "allowed",
   );
 
   assert.equal(

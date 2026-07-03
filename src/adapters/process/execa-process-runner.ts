@@ -23,7 +23,8 @@ export class ExecaProcessRunner implements ProcessRunner {
       const result = await execa(request.executable, [...request.args], {
         cwd: request.cwd,
         shell: false,
-        stdin: "ignore",
+        stdin: request.stdin === undefined ? "ignore" : "pipe",
+        input: request.stdin,
         stdout: "pipe",
         stderr: "pipe",
         reject: false,

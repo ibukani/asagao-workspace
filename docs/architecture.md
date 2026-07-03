@@ -83,9 +83,9 @@ MCP サーバーの組み立てと、共有 app context の作成を担当しま
 
 外部ライブラリと低レベル I/O の差異を吸収する境界です。Issue #36 で次の adapter を導入しています。
 
-- `src/adapters/process/`: `execa` を隠蔽する `ProcessRunner`。shell string ではなく argument array、timeout、cancel、stdout/stderr capture、truncation metadata を扱います。
+- `src/adapters/process/`: `execa` を隠蔽する `ProcessRunner`。shell string ではなく argument array、stdin、timeout、cancel、stdout/stderr capture、truncation metadata を扱います。
 - `src/adapters/queue/`: `p-queue` を隠蔽する `JobQueue`。global concurrency と workspace 単位 concurrency を分離します。
-- `src/adapters/git/`: fixed-argument の `git` CLI invocation を隠蔽する `GitAdapter`。`get_git_status` / `get_workspace_diff` はこの境界を再利用します。
+- `src/adapters/git/`: fixed-argument の `git` CLI invocation を隠蔽する `GitAdapter`。`get_git_status` / `get_workspace_diff` / `apply_patch` はこの境界を再利用します。
 - `src/adapters/files/`: `fast-glob` / `ignore` / binary detector を隠蔽する `WorkspaceTraversal`。file tree と search の対象収集、ignored / denied / binary / too-large metadata を扱います。
 - `src/adapters/archive/`: `yazl` を隠蔽する `ArchiveWriter`。archive target collection と ZIP writing を分離します。
 - `src/adapters/logging/`: `pino` を隠蔽する `DiagnosticsLogger`。runtime diagnostics は audit event と別モデルとして扱います。
@@ -98,7 +98,7 @@ adapter は security policy、audit event semantics、Workspace lifecycle、MCP 
 
 application-level な状態遷移と workflow を担当します。現在は `WorkspaceRegistry` が in-memory store を使って Workspace record を管理し、`WorkspaceLifecycleService` が TTL / dirty / busy / reusable 判定、claim/reset/clean の Phase 1 service boundary、audit 接続を担当します。`WorkspaceInspectionService` は Workspace 内 file tree、単一 text file read、literal keyword search を policy / audit 経由で実行します。
 
-`WorkspaceInspectionService` は `WorkspaceTraversal` を使って file tree / search を実行し、`read_file` は既存の workspace path boundary と text/binary guard を通します。`WorkspaceGitService` は `GitAdapter` を使って fixed-argument git operation を実行します。どちらも service 層で policy / audit を維持し、adapter 固有の型や例外を tool output に漏らしません。
+`WorkspaceInspectionService` は `WorkspaceTraversal` を使って file tree / search を実行し、`read_file` は既存の workspace path boundary と text/binary guard を通します。`WorkspaceGitService` は `GitAdapter` を使って fixed-argument git inspection を実行します。`WorkspacePatchService` は `GitAdapter` の `git apply --numstat` / `git apply --check` / `git apply` 境界を使い、patch policy、audit、path safety、lifecycle dirty marker を接続します。いずれも service 層で policy / audit を維持し、adapter 固有の型や例外を tool output に漏らしません。
 
 `WorkspaceRegistry` の現時点の責務:
 
@@ -144,7 +144,7 @@ Workspace Runner の共通 model、Zod schema、tool response envelope を定義
 
 Workspace Runner の file、git、patch、command、artifact、lifecycle 操作に対する policy 判定、secret default deny、log masking、audit event model を担当します。この層は tool handler、HTTP transport、process runtime の wiring に依存せず、domain model と純粋な policy/audit contract を提供します。
 
-初期 policy は保守的です。internet policy の既定値は `none`、secret は標準では注入せず、command execution は `deny_all` から始めます。patch application、file write/delete、artifact export/delete も明示 policy なしでは許可しません。
+初期 policy は保守的です。internet policy の既定値は `none`、secret は標準では注入せず、command execution は `deny_all` から始めます。`apply_patch` は MVP の中核機能として preflight 必須・path safety・audit 前提で許可し、file write/delete、artifact export/delete、command execution は引き続き明示 policy なしでは許可しません。
 
 ### UI resource layer
 
@@ -191,11 +191,13 @@ delete_workspace
 get_workspace_lifecycle
 ```
 
-この段階では、process-local な Workspace record と local workspace directory を扱います。`create_workspace` は設定された workspace root 配下に workspace directory を作成し、`delete_workspace` は対象 workspace directory だけを削除してから record を `deleted` status へ遷移させます。`get_workspace_lifecycle` は TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。Phase 1 の `reset_workspace` / `clean_workspace` / `claim_workspace` は tool として公開せず、後続実装から使える service boundary と audit 接続に留めます。patch 適用、shell 実行、repository clone、git reset / git clean の実処理は行いません。
+この段階では、process-local な Workspace record と local workspace directory を扱います。`create_workspace` は設定された workspace root 配下に workspace directory を作成し、`delete_workspace` は対象 workspace directory だけを削除してから record を `deleted` status へ遷移させます。`get_workspace_lifecycle` は TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。Phase 1 の `reset_workspace` / `clean_workspace` / `claim_workspace` は tool として公開せず、後続実装から使える service boundary と audit 接続に留めます。shell 実行、repository clone、git reset / git clean の実処理は行いません。patch 適用は `apply_patch` が担当します。
 
 Workspace inspection tool は `get_file_tree`、`read_file`、`search_workspace` を公開します。すべて読み取り専用で、workspace-relative path だけを受け取り、host absolute path は返しません。`.git/`、`node_modules/`、`.asagao/` など file policy の denied prefix は省略または拒否されます。binary file は読まず、検索は Phase 1 では literal keyword search のみです。`read_files_batch` は単一 file read の上限・audit・binary handling が安定するまで公開しません。
 
 Workspace git inspection tool は `get_git_status`、`get_workspace_diff` を公開します。これらは任意 shell command ではなく fixed-argument の `git` invocation として service 層に閉じ、git operation policy と audit boundary を通ります。`get_git_status` は branch、HEAD commit、clean 判定、changed files、file ごとの staged / unstaged / untracked / conflicted metadata を返します。`get_workspace_diff` は changed files、diffstat、必要に応じて size-limited patch body を返し、deleted / binary / untracked file と巨大 diff を structured metadata で扱います。非 git workspace は `not_git_workspace` failure として返します。
+
+Workspace patch tool は `apply_patch` を公開します。patch 本文は stdin 経由で `git apply` 系 command へ渡し、`git apply --numstat -z` で対象 path を抽出、`git apply --check` で preflight、`git apply` で適用します。Asagao 側では patch parser / applicator を再実装せず、対象 path の workspace-relative 正規化、denied prefix、symlink traversal、expectedBaseCommit、patch size limit、audit event、structured diagnostics、lifecycle dirty marker を担当します。
 
 共通 response は `ok: true` のとき `data` を持ち、`ok: false` のとき `error` を持つ stable envelope を使います。
 
@@ -217,8 +219,8 @@ Workspace git inspection tool は `get_git_status`、`get_workspace_diff` を公
 
 ## 推奨する次のアーキテクチャマイルストーン
 
-1. `get_git_status` / `get_workspace_diff` を lifecycle の dirty marker 更新へ接続する。
-2. apply_patch tool を追加し、patch 適用後の dirty marker を更新する。
-3. command job 基盤を追加し、lifecycle の busy marker を実行状態へ接続する。
+1. command job 基盤を追加し、lifecycle の busy marker を実行状態へ接続する。
+2. command log cursor と cancel semantics を実装する。
+3. snapshot / restore / rollback を `apply_patch` の失敗復旧 story と接続する。
 4. TypeScript と Zod schema を使い、schema と contract drift を早期に検出できる状態を保つ。
 5. ホスティング先を選定してから、deployment-specific adapter を追加する。
