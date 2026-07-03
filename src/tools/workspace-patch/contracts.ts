@@ -16,7 +16,7 @@ export const WORKSPACE_PATCH_TOOL_NAMES = [
 export const applyPatchInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    patch: z.string().min(1),
+    patch: z.string(),
     expectedBaseCommit: z.string().min(1).optional(),
     mode: workspacePatchModeSchema.default("apply"),
   })
