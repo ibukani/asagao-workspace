@@ -86,12 +86,12 @@ function readmePatch(): string {
   ].join("\n");
 }
 
-test("workspace patch model returns structured apply results and invalid input failures", async () => {
+test("workspace patch model returns structured non-applied results for empty patches", async () => {
   const fixture = createFixture();
   try {
     initGitRepository(fixture.workspaceDirectory);
 
-    const invalid = await buildApplyPatchResult(fixture.service, {
+    const empty = await buildApplyPatchResult(fixture.service, {
       workspaceId: fixture.workspace.workspaceId,
       patch: "",
     });
@@ -100,14 +100,34 @@ test("workspace patch model returns structured apply results and invalid input f
       patch: readmePatch(),
     });
 
-    assert.equal(invalid.ok, false);
-    assert.equal(invalid.error.code, "invalid_input");
-    assert.equal(applyPatchOutputSchema.safeParse(invalid).success, true);
+    assert.equal(empty.ok, true);
+    assert.equal(empty.data.applied, false);
+    assert.equal(empty.data.diagnostics[0]?.code, "empty_patch");
+    assert.equal(applyPatchOutputSchema.safeParse(empty).success, true);
 
     assert.equal(applied.ok, true);
     assert.equal(applied.data.applied, true);
     assert.equal(applied.data.checkedFiles[0], "README.md");
     assert.equal(applyPatchOutputSchema.safeParse(applied).success, true);
+  } finally {
+    rmSync(fixture.parent, { recursive: true, force: true });
+  }
+});
+
+test("workspace patch model keeps schema validation failures in the error envelope", async () => {
+  const fixture = createFixture();
+  try {
+    initGitRepository(fixture.workspaceDirectory);
+
+    const invalid = await buildApplyPatchResult(fixture.service, {
+      workspaceId: fixture.workspace.workspaceId,
+      patch: readmePatch(),
+      mode: "invalid-mode",
+    });
+
+    assert.equal(invalid.ok, false);
+    assert.equal(invalid.error.code, "invalid_input");
+    assert.equal(applyPatchOutputSchema.safeParse(invalid).success, true);
   } finally {
     rmSync(fixture.parent, { recursive: true, force: true });
   }
