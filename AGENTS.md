@@ -38,6 +38,7 @@ npm run inspect
 - `src/config/`: environment and configuration loading.
 - `src/domain/`: Workspace Runner domain models, Zod schemas, and common tool response envelopes.
 - `src/http/`: HTTP server, CORS, request routing, and Streamable HTTP transport adapter.
+- `src/adapters/`: adapter boundary for external libraries and low-level I/O when runner dependencies are introduced. Keep library-specific types and errors behind this boundary.
 - `src/runtime/`: process startup and lifecycle boundary.
 - `src/services/`: application services such as Workspace registry state transitions.
 - `src/storage/`: storage boundaries such as process-local in-memory stores.
@@ -45,7 +46,7 @@ npm run inspect
 - `src/ui/`: Apps SDK UI resource registration.
 - `public/`: static UI assets served through Apps SDK resources.
 - `tests/`: fast tests for config and pure tool behavior.
-- `docs/`: architecture notes and ADRs.
+- `docs/`: architecture notes, Runner library policy, and ADRs.
 
 
 ## Runner security rules
@@ -56,6 +57,9 @@ npm run inspect
 - Runner operations should emit audit events through the security boundary.
 - Runner file and patch operations must pass only normalized workspace-relative paths. Reject `..`, absolute paths, drive prefixes, and NUL bytes fail-closed at the security boundary.
 - Keep security boundary code independent from `src/tools/`, `src/app/`, `src/http/`, and `src/runtime/` wiring.
+- Do not delegate security policy, audit event semantics, Workspace lifecycle, Change Set model, or MCP tool contracts to external libraries.
+- When adding runner libraries, call them through adapter/service boundaries and convert library-specific failures into structured Asagao errors.
+- Keep runtime diagnostics logging separate from audit events.
 
 ## Adding a tool
 
@@ -73,6 +77,7 @@ npm run inspect
 - Keep MCP tool names concrete and action-oriented.
 - Keep ChatGPT-facing tool outputs structured and stable.
 - Update documentation when adding or removing tools, scripts, environment variables, setup steps, or architectural boundaries.
+- Consult `docs/runner-library-policy.md` and `docs/adr/0002-runner-library-policy.md` before adding process, git, traversal, archive, diagnostics logging, queue, or locking dependencies.
 - Prefer small, reviewable commits.
 
 ## Current scaffold
