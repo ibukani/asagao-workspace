@@ -23,6 +23,10 @@ test("apply_patch contract parses defaults and rejects unknown input", () => {
   });
 
   assert.equal(parsed.mode, "apply");
+  assert.equal(applyPatchInputSchema.parse({
+    workspaceId: "wks_patchcontracts001",
+    patch: "",
+  }).patch, "");
   assert.equal(applyPatchInputSchema.safeParse({
     workspaceId: "wks_patchcontracts001",
     patch: validPatch,
