@@ -164,7 +164,7 @@ ASAGAO_WORKSPACE_ROOT=.asagao/workspaces
 
 Workspace path の解決は `workspaceId + relativePath` の形に閉じ、root 外・workspace 外へ出る path traversal と、root 外へ抜ける symlink traversal を拒否します。ChatGPT-facing な tool output にはホスト側の絶対パスを露出しません。
 
-repository clone、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。patch 適用は `apply_patch` が git workspace 向けに担当します。
+repository clone、任意 shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。patch 適用は `apply_patch` が git workspace 向けに担当します。command 実行は `run_command` が明示 allowlist 済みの argument array だけを非同期 job として扱い、shell string は受け付けません。
 
 ## Workspace inspection tools
 
@@ -207,6 +207,21 @@ repository clone、shell 実行、file write tool、git reset / git clean の実
 
 patch 操作は `WorkspacePatchService` を通り、patch policy、audit event、workspace-relative path 正規化、denied prefix、workspace 外へ抜ける symlink traversal の検査を行います。成功時は changed files、diffstat、resulting git status、diagnostics を返し、lifecycle dirty marker を更新します。壊れた patch、base commit mismatch、unsafe path、patch size 超過は適用前に structured diagnostics として返します。patch 適用前 snapshot の作成は #13 に委譲し、現時点では `snapshotCreated: false` と `snapshotPolicy: "deferred_to_issue_13"` を返します。
 
+## Workspace command job tools
+
+`src/tools/command-job/` には、Workspace 内で allowlist 済み command を非同期 job として実行する tool contract と handler model を定義しています。
+
+- `run_command`
+- `get_command_status`
+
+`run_command` は `workspaceId`、`command: string[]`、任意の workspace-relative `cwd`、必須の `timeoutMs` を受け取り、command 完了を待たずに `queued` の `jobId` を返します。`get_command_status` は同じ `workspaceId` と `jobId` で job を照会し、`queued` / `running` / `succeeded` / `failed` / `timed_out` / `cancelled`、exit code、signal、elapsed time、stdout/stderr、truncation metadata を返します。
+
+command は shell string ではなく argument array として評価します。`bash -lc`、`sh -c`、`powershell` などの shell 経由実行は MVP では拒否し、command policy の既定値は `deny_all` のままです。実際に実行できる command は workspace policy の allowlist に明示されたものに限り、denylist は allowlist より優先されます。`cwd` は workspace root または workspace-relative path に限定し、絶対パス、`..` traversal、workspace 外へ抜ける symlink traversal は拒否します。
+
+実行は `CommandJobService` が `ProcessRunner` と `JobQueue` を経由して行います。tool handler は `execa` や `p-queue` を直接呼ばず、process adapter が timeout、stdout/stderr capture、exit metadata を扱い、queue adapter が global concurrency と workspace 単位 concurrency を扱います。job 実行中は lifecycle busy marker を立て、同一 workspace の running job がなくなると idle に戻します。policy 判定、開始、成功、失敗、timeout は audit event に記録し、runtime diagnostics logger とは分離します。
+
+`get_command_logs`、incremental log cursor、`cancel_command` は #12 に残します。
+
 ## Runner library policy
 
 Runner の低レベル処理は、必要に応じて外部ライブラリを使います。ただし、ライブラリは Asagao Workspace の security boundary、audit event、Workspace lifecycle、Change Set model、MCP tool contract を置き換えません。
@@ -235,7 +250,7 @@ Issue #36 で MVP dependency と adapter 境界を導入済みです。採用し
 - git status / diff inspection、patch apply、lifecycle claim/reset/clean 操作を含む audit event の共通形式と recorder interface。
 - audit metadata や command log に適用できる log masking extension point。
 
-repository clone、shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。patch 適用は `apply_patch` が git workspace 向けに担当します。これらを追加する場合は、実際の副作用を起こす前に `src/security/` の policy を参照し、audit event を記録する必要があります。
+repository clone、任意 shell 実行、file write tool、git reset / git clean の実処理はまだ行いません。patch 適用は `apply_patch` が git workspace 向けに担当します。command 実行は `run_command` が明示 allowlist 済みの argument array だけを非同期 job として扱います。これらを追加・拡張する場合は、実際の副作用を起こす前に `src/security/` の policy を参照し、audit event を記録する必要があります。
 
 
 ## 新しいツールを追加する
@@ -249,8 +264,8 @@ repository clone、shell 実行、file write tool、git reset / git clean の実
 
 ## 次のステップ
 
-1. command job 基盤を追加し、`ProcessRunner` / `JobQueue` と busy marker を接続する。
-2. command log cursor と cancel semantics を実装する。
+1. command log cursor と cancel semantics を実装する。
+2. command allowlist profile と実運用向け workspace policy の設定導線を追加する。
 3. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。
 4. #13 snapshot / restore と `apply_patch` の rollback story を接続する。
 5. #14 export_patch / archive と #16 prepare_change_set を実装する。

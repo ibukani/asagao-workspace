@@ -215,7 +215,11 @@ get_command_logs
 cancel_command
 ```
 
-`run_command` は即座に `jobId` を返します。長時間実行される command を安全に poll できるように、status と log は別 tool にします。
+Issue #11 の MVP では `run_command` と `get_command_status` を実装します。`run_command` は command 完了を待たずに `jobId` を返し、長時間実行される command の状態は `get_command_status` で poll します。command input は shell string ではなく `string[]` の argument array に限定し、workspace policy の allowlist と denylist を通過したものだけを実行します。`cwd` は workspace root または workspace-relative path に限定し、timeout は必須入力として扱います。
+
+実行は `CommandJobService` が process-local `CommandJobStore`、`ProcessRunner`、`JobQueue`、workspace lifecycle service、security boundary、audit recorder、diagnostics logger を接続します。status は `queued`、`running`、`succeeded`、`failed`、`timed_out`、`cancelled` を返し、stdout/stderr、exit code、signal、elapsed time、truncation metadata を job record に保存します。同一 workspace の command は queue adapter で直列化し、実行中は busy marker を立てます。
+
+`get_command_logs`、incremental log cursor、`cancel_command` は #12 で扱います。
 
 ### Snapshot and rollback
 

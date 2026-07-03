@@ -4,9 +4,11 @@ import type { AppConfig } from "../config/env.ts";
 import { registerWorkspaceInspectionTools } from "./workspace-inspection/register.ts";
 import { registerWorkspaceGitTools } from "./workspace-git/register.ts";
 import { registerWorkspacePatchTools } from "./workspace-patch/register.ts";
+import { registerCommandJobTools } from "./command-job/register.ts";
 import { WORKSPACE_GIT_TOOL_NAMES } from "./workspace-git/contracts.ts";
 import { WORKSPACE_INSPECTION_TOOL_NAMES } from "./workspace-inspection/contracts.ts";
 import { WORKSPACE_PATCH_TOOL_NAMES } from "./workspace-patch/contracts.ts";
+import { COMMAND_JOB_TOOL_NAMES } from "./command-job/contracts.ts";
 import { registerWorkspaceLifecycleTools } from "./workspace-lifecycle/register.ts";
 import { WORKSPACE_LIFECYCLE_TOOL_NAMES } from "./workspace-lifecycle/contracts.ts";
 import { registerWorkspaceStatusTool } from "./workspace-status/register.ts";
@@ -18,6 +20,7 @@ export const TOOL_NAMES = [
   ...WORKSPACE_INSPECTION_TOOL_NAMES,
   ...WORKSPACE_GIT_TOOL_NAMES,
   ...WORKSPACE_PATCH_TOOL_NAMES,
+  ...COMMAND_JOB_TOOL_NAMES,
 ] as const;
 
 export function registerTools(
@@ -42,5 +45,9 @@ export function registerTools(
   registerWorkspacePatchTools(server, {
     config,
     workspacePatchService: services.workspacePatchService,
+  });
+  registerCommandJobTools(server, {
+    config,
+    commandJobService: services.commandJobService,
   });
 }

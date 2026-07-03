@@ -144,7 +144,7 @@ Workspace Runner の共通 model、Zod schema、tool response envelope を定義
 
 Workspace Runner の file、git、patch、command、artifact、lifecycle 操作に対する policy 判定、secret default deny、log masking、audit event model を担当します。この層は tool handler、HTTP transport、process runtime の wiring に依存せず、domain model と純粋な policy/audit contract を提供します。
 
-初期 policy は保守的です。internet policy の既定値は `none`、secret は標準では注入せず、command execution は `deny_all` から始めます。`apply_patch` は MVP の中核機能として preflight 必須・path safety・audit 前提で許可し、file write/delete、artifact export/delete、command execution は引き続き明示 policy なしでは許可しません。
+初期 policy は保守的です。internet policy の既定値は `none`、secret は標準では注入せず、command execution は `deny_all` から始めます。`apply_patch` は MVP の中核機能として preflight 必須・path safety・audit 前提で許可します。`run_command` は公開済みですが、実行できるのは明示 command allowlist を通過した argument array のみです。file write/delete、artifact export/delete、任意 shell 実行は引き続き明示 policy なしでは許可しません。
 
 ### UI resource layer
 
@@ -191,13 +191,15 @@ delete_workspace
 get_workspace_lifecycle
 ```
 
-この段階では、process-local な Workspace record と local workspace directory を扱います。`create_workspace` は設定された workspace root 配下に workspace directory を作成し、`delete_workspace` は対象 workspace directory だけを削除してから record を `deleted` status へ遷移させます。`get_workspace_lifecycle` は TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。Phase 1 の `reset_workspace` / `clean_workspace` / `claim_workspace` は tool として公開せず、後続実装から使える service boundary と audit 接続に留めます。shell 実行、repository clone、git reset / git clean の実処理は行いません。patch 適用は `apply_patch` が担当します。
+この段階では、process-local な Workspace record と local workspace directory を扱います。`create_workspace` は設定された workspace root 配下に workspace directory を作成し、`delete_workspace` は対象 workspace directory だけを削除してから record を `deleted` status へ遷移させます。`get_workspace_lifecycle` は TTL 切れ、dirty/busy marker、blocker、再利用可能性を返します。Phase 1 の `reset_workspace` / `clean_workspace` / `claim_workspace` は tool として公開せず、後続実装から使える service boundary と audit 接続に留めます。repository clone、git reset / git clean、任意 shell 実行の実処理は行いません。patch 適用は `apply_patch` が担当し、command 実行は `run_command` が allowlist 済み argument array に限定して担当します。
 
 Workspace inspection tool は `get_file_tree`、`read_file`、`search_workspace` を公開します。すべて読み取り専用で、workspace-relative path だけを受け取り、host absolute path は返しません。`.git/`、`node_modules/`、`.asagao/` など file policy の denied prefix は省略または拒否されます。binary file は読まず、検索は Phase 1 では literal keyword search のみです。`read_files_batch` は単一 file read の上限・audit・binary handling が安定するまで公開しません。
 
 Workspace git inspection tool は `get_git_status`、`get_workspace_diff` を公開します。これらは任意 shell command ではなく fixed-argument の `git` invocation として service 層に閉じ、git operation policy と audit boundary を通ります。`get_git_status` は branch、HEAD commit、clean 判定、changed files、file ごとの staged / unstaged / untracked / conflicted metadata を返します。`get_workspace_diff` は changed files、diffstat、必要に応じて size-limited patch body を返し、deleted / binary / untracked file と巨大 diff を structured metadata で扱います。非 git workspace は `not_git_workspace` failure として返します。
 
 Workspace patch tool は `apply_patch` を公開します。patch 本文は stdin 経由で `git apply` 系 command へ渡し、`git apply --numstat -z` で対象 path を抽出、`git apply --check` で preflight、`git apply` で適用します。Asagao 側では patch parser / applicator を再実装せず、対象 path の workspace-relative 正規化、denied prefix、symlink traversal、expectedBaseCommit、patch size limit、audit event、structured diagnostics、lifecycle dirty marker を担当します。
+
+Workspace command job tool は `run_command` と `get_command_status` を公開します。`run_command` は command 完了を待たずに `jobId` を返し、実行状態は `get_command_status` で poll します。`CommandJobService` は process-local `CommandJobStore`、`ProcessRunner`、`JobQueue`、workspace lifecycle service、security boundary、audit recorder、diagnostics logger を接続します。tool handler は `execa` / `p-queue` を直接呼ばず、command は shell string ではなく `string[]` として扱います。`cwd` は workspace-relative に閉じ、timeout は必須入力かつ policy 上限で制限します。同一 workspace の command は queue adapter の workspace concurrency により直列化され、実行中は lifecycle busy marker が立ちます。
 
 共通 response は `ok: true` のとき `data` を持ち、`ok: false` のとき `error` を持つ stable envelope を使います。
 
@@ -219,8 +221,8 @@ Workspace patch tool は `apply_patch` を公開します。patch 本文は stdi
 
 ## 推奨する次のアーキテクチャマイルストーン
 
-1. command job 基盤を追加し、lifecycle の busy marker を実行状態へ接続する。
-2. command log cursor と cancel semantics を実装する。
+1. command log cursor と cancel semantics を実装する。
+2. command allowlist profile と実運用向け workspace policy の設定導線を追加する。
 3. snapshot / restore / rollback を `apply_patch` の失敗復旧 story と接続する。
 4. TypeScript と Zod schema を使い、schema と contract drift を早期に検出できる状態を保つ。
 5. ホスティング先を選定してから、deployment-specific adapter を追加する。
