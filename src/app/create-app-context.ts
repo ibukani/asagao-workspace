@@ -1,4 +1,10 @@
 import { type AppConfig, loadConfig } from "../config/env.ts";
+import { LocalGitAdapter } from "../adapters/git/index.ts";
+import { LocalWorkspaceTraversal } from "../adapters/files/index.ts";
+import { YazlArchiveWriter, type ArchiveWriter } from "../adapters/archive/index.ts";
+import { PinoDiagnosticsLogger, type DiagnosticsLogger } from "../adapters/logging/index.ts";
+import { ExecaProcessRunner, type ProcessRunner } from "../adapters/process/index.ts";
+import { PQueueJobQueue, type JobQueue } from "../adapters/queue/index.ts";
 import { LocalWorkspaceFilesystem } from "../services/local-workspace-filesystem.ts";
 import { WorkspaceInspectionService } from "../services/workspace-inspection-service.ts";
 import { WorkspaceGitService } from "../services/workspace-git-service.ts";
@@ -16,6 +22,10 @@ import {
 } from "../security/index.ts";
 
 export type AppServices = {
+  diagnosticsLogger: DiagnosticsLogger;
+  processRunner: ProcessRunner;
+  jobQueue: JobQueue;
+  archiveWriter: ArchiveWriter;
   workspaceStore: InMemoryWorkspaceStore;
   workspaceFilesystem: LocalWorkspaceFilesystem;
   workspaceRegistry: WorkspaceRegistry;
@@ -50,6 +60,12 @@ export function createAppContext({
   });
 
   const security = createRunnerSecurityServices();
+  const diagnosticsLogger = new PinoDiagnosticsLogger({ logMasker: security.logMasker });
+  const processRunner = new ExecaProcessRunner();
+  const jobQueue = new PQueueJobQueue();
+  const gitAdapter = new LocalGitAdapter(processRunner);
+  const traversal = new LocalWorkspaceTraversal();
+  const archiveWriter = new YazlArchiveWriter();
   const workspaceLifecycleService = new WorkspaceLifecycleService({
     workspaceRegistry,
     lifecycleStore: workspaceLifecycleStore,
@@ -60,16 +76,22 @@ export function createAppContext({
     workspaceRegistry,
     workspaceFilesystem,
     security,
+    traversal,
     ...(clock === undefined ? {} : { clock }),
   });
   const workspaceGitService = new WorkspaceGitService({
     workspaceRegistry,
     workspaceFilesystem,
     security,
+    gitAdapter,
     ...(clock === undefined ? {} : { clock }),
   });
 
   return Object.freeze({
+    diagnosticsLogger,
+    processRunner,
+    jobQueue,
+    archiveWriter,
     workspaceStore,
     workspaceFilesystem,
     workspaceRegistry,

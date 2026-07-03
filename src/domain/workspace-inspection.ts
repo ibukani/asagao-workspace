@@ -80,6 +80,7 @@ export const workspaceSearchSkippedFilesSchema = z
     binary: z.number().int().nonnegative(),
     tooLarge: z.number().int().nonnegative(),
     denied: z.number().int().nonnegative(),
+    ignored: z.number().int().nonnegative().optional(),
     unreadable: z.number().int().nonnegative(),
   })
   .strict();
