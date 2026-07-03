@@ -10,6 +10,7 @@ Asagao Workspace は、OpenAI Apps SDK と Model Context Protocol（MCP）サー
 - Workspace lifecycle ツール: `create_workspace`、`list_workspaces`、`get_workspace`、`delete_workspace`、`get_workspace_lifecycle`。
 - Workspace inspection ツール: `get_file_tree`、`read_file`、`search_workspace`。
 - Workspace git inspection ツール: `get_git_status`、`get_workspace_diff`。
+- Runner library policy と ADR: 低レベル処理を外部ライブラリに寄せつつ、adapter / security / audit 境界を維持する方針。
 - Workspace Runner の中核となる domain model: Workspace、Command Job、Artifact、Snapshot、Change Set。
 - Workspace lifecycle 系ツールの contract schema、handler model、local workspace directory 管理、TTL / dirty / busy / reusable 判定境界。
 - Runner 操作向けの security boundary、workspace policy、command policy、lifecycle policy、audit event model、log masking 拡張点。
@@ -96,7 +97,10 @@ https://<your-tunnel-domain>/mcp
 ├── .github/workflows/ci.yml
 ├── docs/
 │   ├── architecture.md
-│   └── adr/0001-layered-mcp-app.md
+│   ├── runner-library-policy.md
+│   └── adr/
+│       ├── 0001-layered-mcp-app.md
+│       └── 0002-runner-library-policy.md
 ├── public/asagao-widget.html
 ├── scripts/check-syntax.ts
 ├── src/
@@ -105,6 +109,7 @@ https://<your-tunnel-domain>/mcp
 │   ├── domain/              # Workspace Runner の共通ドメイン契約
 │   ├── filesystem/          # Workspace root / path traversal / symlink 境界
 │   ├── http/                # HTTP + Streamable HTTP transport アダプタ
+│   ├── adapters/            # 外部ライブラリ・低レベルI/Oを隠蔽する境界（#36で実体化）
 │   ├── runtime/             # プロセス起動境界
 │   ├── security/            # Runner policy / audit / secret default deny 境界
 │   ├── services/            # Workspace registry などの application service
@@ -118,7 +123,7 @@ https://<your-tunnel-domain>/mcp
 └── README.md
 ```
 
-想定している拡張モデルについては [`docs/architecture.md`](docs/architecture.md) を参照してください。
+想定している拡張モデルについては [`docs/architecture.md`](docs/architecture.md) を参照してください。Runner 実装で使う外部ライブラリと adapter 境界の方針は [`docs/runner-library-policy.md`](docs/runner-library-policy.md) と [`docs/adr/0002-runner-library-policy.md`](docs/adr/0002-runner-library-policy.md) に記録しています。
 
 ## 開発ポリシー
 
@@ -191,6 +196,23 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 
 `get_workspace_diff` は changed files、diffstat、必要に応じて patch 本文を返します。patch 本文は `maxPatchBytes` と git policy の `maxPatchBytes` で上限化され、巨大 diff でも result envelope が壊れないよう `patch.truncated` と `patch.omittedReason` を返します。deleted file は deleted status と通常の git patch、binary file は `binary: true` として扱い、untracked text file は new file patch を生成します。
 
+## Runner library policy
+
+Runner の低レベル処理は、必要に応じて外部ライブラリを使います。ただし、ライブラリは Asagao Workspace の security boundary、audit event、Workspace lifecycle、Change Set model、MCP tool contract を置き換えません。
+
+MVP で導入する候補は次の通りです。実際の dependency 追加と adapter 実装は #36 で扱います。
+
+- command execution: `execa`
+- job queue / concurrency control: `p-queue`
+- file traversal: `fast-glob`
+- `.gitignore` compatible filtering: `ignore`
+- archive generation: `yazl`
+- runtime diagnostics logging: `pino`
+
+導入を強く検討する候補は、`simple-git`、`istextorbinary`、`file-type`、Node.js `util.stripVTControlCharacters` / `strip-ansi`、`diff` / jsdiff です。`proper-lockfile` と `lru-cache` は将来検討、`shelljs`、`rimraf`、`fs-extra` は原則非採用または慎重に扱います。
+
+外部ライブラリは tool handler から直接呼ばず、`src/adapters/` または service 境界に閉じ込めます。filesystem、command、git、artifact、lifecycle 操作は policy と audit event を通し、runtime diagnostics logger と audit event model は分離します。
+
 ## Runner security boundary
 
 `src/security/` は、将来の file、patch、command、artifact、lifecycle 操作が共有する安全境界です。現在は実行ツール本体ではなく、次の基盤を提供します。
@@ -216,8 +238,9 @@ repository clone、patch 適用、shell 実行、file write tool、git reset / g
 
 ## 次のステップ
 
-1. `get_git_status` / `get_workspace_diff` の実データを lifecycle dirty marker 更新へ接続する。
-2. apply_patch tool を追加し、dirty marker を更新する。
-3. command job 基盤を追加し、busy marker を更新する。
-4. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。
-5. 対象のホスティング基盤を選定してからデプロイ設定を追加する。
+1. #36 で Runner 共通 dependency と adapter 境界を整備する。
+2. #10 / #19 の既存実装を library-aware policy と照合し、必要なら adapter 化する。
+3. apply_patch tool を追加し、`git apply --check` / `git apply` semantics を `GitAdapter` 経由で利用する。
+4. command job 基盤を追加し、`ProcessRunner` / `JobQueue` と busy marker を接続する。
+5. #23 Phase 2 で reset / clean / reuse の実処理と cache policy を完成させる。
+6. 対象のホスティング基盤を選定してからデプロイ設定を追加する。
