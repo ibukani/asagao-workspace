@@ -16,11 +16,7 @@ import { InMemoryAuditEventRecorder } from "../src/security/audit.ts";
 import { createRunnerSecurityServices } from "../src/security/index.ts";
 import { LocalWorkspaceFilesystem } from "../src/services/local-workspace-filesystem.ts";
 import { WorkspaceLifecycleService } from "../src/services/workspace-lifecycle-service.ts";
-import {
-  WORKSPACE_PATCH_ERROR_CODES,
-  WorkspacePatchService,
-  WorkspacePatchServiceError,
-} from "../src/services/workspace-patch-service.ts";
+import { WorkspacePatchService } from "../src/services/workspace-patch-service.ts";
 import { WorkspaceRegistry } from "../src/services/workspace-registry.ts";
 import { InMemoryWorkspaceLifecycleStore } from "../src/storage/in-memory-workspace-lifecycle-store.ts";
 import { InMemoryWorkspaceStore } from "../src/storage/in-memory-workspace-store.ts";
@@ -201,7 +197,7 @@ test("WorkspacePatchService rejects expectedBaseCommit mismatches before applyin
 });
 
 
-test("WorkspacePatchService rejects path traversal, absolute path, and drive prefix patch targets", async () => {
+test("WorkspacePatchService reports path traversal, absolute path, and drive prefix patch targets as diagnostics", async () => {
   const fixture = createFixture();
   try {
     initGitRepository(fixture.workspaceDirectory);
@@ -211,18 +207,15 @@ test("WorkspacePatchService rejects path traversal, absolute path, and drive pre
       ["absolute path", unsafeNewFilePatch("/tmp/evil.txt")],
       ["drive prefix", unsafeNewFilePatch("C:/evil.txt")],
     ] as const) {
-      await assert.rejects(
-        fixture.service.applyPatch({
-          workspaceId: fixture.workspace.workspaceId,
-          patch,
-        }),
-        (error: unknown) => {
-          assert.ok(error instanceof WorkspacePatchServiceError, label);
-          assert.equal(error.code, WORKSPACE_PATCH_ERROR_CODES.patchOperationFailed, label);
-          assert.equal((error.details.diagnostic as { code?: string } | undefined)?.code, "unsafe_path", label);
-          return true;
-        },
-      );
+      const result = await fixture.service.applyPatch({
+        workspaceId: fixture.workspace.workspaceId,
+        patch,
+      });
+
+      assert.equal(result.applied, false, label);
+      assert.equal(result.diagnostics[0]?.code, "unsafe_path", label);
+      assert.equal(JSON.stringify(result).includes(fixture.workspaceDirectory), false, label);
+      assert.equal(JSON.stringify(result).includes(patch), false, label);
     }
 
     assert.equal(existsSync(join(fixture.parent, "evil.txt")), false);
