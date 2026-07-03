@@ -11,21 +11,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   verify:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Verify
-        run: npm run verify
+    uses: ./.github/workflows/reusable-node-verify.yml
+    with:
+      node-version: "22"
+      install-command: "npm install"
+      verify-command: "npm run verify"
