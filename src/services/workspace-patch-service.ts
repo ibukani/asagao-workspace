@@ -219,10 +219,28 @@ export class WorkspacePatchService {
             });
           }
 
-          const targets = await this.#inspectPatchTargets({
+          const inspectedTargets = await this.#inspectPatchTargets({
             workspaceDirectory,
             patch: input.patch,
           });
+          if (inspectedTargets.diagnostic !== null) {
+            return this.#buildResult({
+              patchId,
+              workspaceId: workspace.workspaceId,
+              mode,
+              applied: false,
+              baseCommit: beforeStatus.headCommit,
+              resultingCommit: beforeStatus.headCommit,
+              checkedFiles: [],
+              diff: beforeDiff,
+              status: beforeStatus,
+              maxFiles,
+              maxPatchBytes,
+              diagnostics: [inspectedTargets.diagnostic],
+            });
+          }
+
+          const targets = inspectedTargets.targets;
           const targetPathDiagnostics = this.#validatePatchTargets({ workspace, targets, policy });
           if (targetPathDiagnostics.length > 0) {
             return this.#buildResult({
@@ -368,11 +386,14 @@ export class WorkspacePatchService {
   }: {
     workspaceDirectory: string;
     patch: string;
-  }): Promise<GitPatchTarget[]> {
+  }): Promise<{ targets: GitPatchTarget[]; diagnostic: WorkspacePatchDiagnostic | null }> {
     try {
-      return (await this.#gitAdapter.inspectPatchTargets(workspaceDirectory, { patch })).targetFiles;
+      return {
+        targets: (await this.#gitAdapter.inspectPatchTargets(workspaceDirectory, { patch })).targetFiles,
+        diagnostic: null,
+      };
     } catch (error) {
-      throwPatchInspectionError(error);
+      return handlePatchInspectionError(error);
     }
   }
 
@@ -542,15 +563,14 @@ export function toWorkspacePatchToolFailure(error: unknown): ToolFailure {
   );
 }
 
-function throwPatchInspectionError(error: unknown): never {
+function handlePatchInspectionError(
+  error: unknown,
+): { targets: GitPatchTarget[]; diagnostic: WorkspacePatchDiagnostic | null } {
   if (error instanceof GitAdapterError && error.code === GIT_ADAPTER_ERROR_CODES.gitCommandFailed) {
-    throw new WorkspacePatchServiceError(
-      WORKSPACE_PATCH_ERROR_CODES.patchOperationFailed,
-      "Patch target inspection failed.",
-      {
-        diagnostic: diagnosticFromGitError(error, "invalid_patch", "Patch target inspection failed."),
-      },
-    );
+    return {
+      targets: [],
+      diagnostic: diagnosticFromGitError(error, "invalid_patch", "Patch target inspection failed."),
+    };
   }
 
   throw error;
